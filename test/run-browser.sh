@@ -118,7 +118,7 @@ check_names() { # $1=tag(dom|smoke)  $2=logfile  $3=golden
 DOM_EXPECT=38
 SMOKE_EXPECT=136
 MM_EXPECT=4
-MOBILE_EXPECT=31
+MOBILE_EXPECT=33
 RAIL_EXPECT=10
 
 WHAT="${1:-all}"

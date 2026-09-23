@@ -426,13 +426,24 @@ if (MOBILE === '1') {
       // ② 返回钮：底栏是 fixed 的，读到第几屏都够得着——这正是它待在底栏而不是顶栏的理由
       const back = bar.querySelector('.mobile-bar-back');
       chk('mobile-bar-has-back', Boolean(back), `text=${back ? back.textContent.trim() : 'NO-EL'}`);
+      // 先读到正文深处再点「‹ 目录」——真实动线是读到第 N 屏才想换折。
+      // 2026-09-23 Charlie 手机报「点进门下没有回最外层的按钮」：目录页顶上的「‹ 全部折子」
+      // 在，但页面没回顶，它停在视口上方，他只看见一列节和底栏「‹ 正文」。
+      // 原测试开折即点、scrollY=0，恰好绕过了这条病。
+      window.scrollTo(0, document.documentElement.scrollHeight);
+      await sleep(200);
       back?.click();
       await sleep(400);
+      const up = document.querySelector('.nav-up')?.getBoundingClientRect();
+      chk('nav-up-in-view-after-deep-scroll',
+        Boolean(up) && up.height > 0 && up.top >= 0 && up.bottom <= window.innerHeight,
+        `top=${up ? Math.round(up.top) : 'NO-EL'} bottom=${up ? Math.round(up.bottom) : 'NO-EL'} vh=${window.innerHeight} scrollY=${Math.round(window.scrollY)}`);
     } else {
       chk('mobile-bar-pinned-to-bottom', false, 'no bar');
       chk('mobile-bar-has-core-actions', false, 'no bar');
       chk('mobile-bar-touch-targets-44', false, 'no bar');
       chk('mobile-bar-has-back', false, 'no bar');
+      chk('nav-up-in-view-after-deep-scroll', false, 'no bar');
     }
 
     // ── 目录页（第二层：篇 / 节）────────────────────────────
@@ -499,6 +510,9 @@ if (MOBILE === '1') {
     const barGone = !document.querySelector('.mobile-bar');
     chk('back-returns-to-list', shown(asideList) && barGone,
       `asideDisplay=${asideList ? getComputedStyle(asideList).display : 'NO-EL'} barGone=${barGone}`);
+    // 回清单要从顶上看起：从正文深处退回来若保留 scrollY，清单页落在半截，
+    // 顶栏与前几张卡都在视口外。
+    chk('list-page-starts-at-top', window.scrollY <= 1, `scrollY=${Math.round(window.scrollY)}`);
 
     // ④ 折清单必须整条摊开随页滚，不许再是个内滚小框。
     //    原病（2026-08-19 反馈「吞目录」）就量在这一行：aside 被 max-height:38vh 压住，
