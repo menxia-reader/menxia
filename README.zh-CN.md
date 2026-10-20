@@ -7,7 +7,7 @@
 **AI 产出的阅读批注台。**<br>
 agent 把长文档当「敕草」以 PR 呈上来，你在**渲染态**正文上划句落「涂归」，批完一键呈回，agent 逐条回话改出下一版；**画可** = merge = 定稿。
 
-[**在线试用**](https://charliezong18.github.io/menxia) · [Spec](SPEC.zh-CN.md) · [Backlog](BACKLOG.zh-CN.md)
+[**在线试用**](https://menxia-reader.github.io/menxia) · [Spec](SPEC.zh-CN.md) · [Backlog](BACKLOG.zh-CN.md)
 
 </div>
 
@@ -58,7 +58,7 @@ your-review-repo/
 
 **2. 开 app，给一把钥匙**
 
-打开 [charliezong18.github.io/menxia](https://charliezong18.github.io/menxia)（或你自己 fork 的 Pages 地址）。填 `owner/repo`，然后去生成一把 [fine-grained PAT](https://github.com/settings/personal-access-tokens/new)，只授权**那一个仓库**，权限三项：
+打开 [menxia-reader.github.io/menxia](https://menxia-reader.github.io/menxia)（或你自己 fork 的 Pages 地址）。填 `owner/repo`，然后去生成一把 [fine-grained PAT](https://github.com/settings/personal-access-tokens/new)，只授权**那一个仓库**，权限三项：
 
 - **Contents: Read and write**
 - **Pull requests: Read and write** ← 最容易漏的一项，漏了进清单就 403

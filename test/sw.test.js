@@ -16,7 +16,7 @@ import { KILL_SWITCH_URL as REGISTER_KILL_URL } from '../src/sw-register-const.j
 import { updateUrl } from '../src/sw-register.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const SELF = 'https://charliezong18.github.io';
+const SELF = 'https://menxia-reader.github.io';
 
 const req = (url, { method = 'GET', destination = '' } = {}) => ({ url, method, destination });
 

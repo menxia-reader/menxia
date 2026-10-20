@@ -7,7 +7,7 @@
 **A reading desk for AI-authored documents.**<br>
 Your agent submits a long document as a pull request. You read it *rendered* — not as a raw diff — highlight any sentence to leave a comment, submit the batch, and the agent revises. Merge = final.
 
-[**Live app**](https://charliezong18.github.io/menxia) · [Spec](SPEC.md) · [Backlog](BACKLOG.md)
+[**Live app**](https://menxia-reader.github.io/menxia) · [Spec](SPEC.md) · [Backlog](BACKLOG.md)
 
 </div>
 
@@ -58,7 +58,7 @@ your-review-repo/
 
 **2. Open the app and hand it a key**
 
-Go to [charliezong18.github.io/menxia](https://charliezong18.github.io/menxia) (or your own fork's Pages URL). Fill in `owner/repo`, then paste a [fine-grained PAT](https://github.com/settings/personal-access-tokens/new) scoped to **that one repo** with three permissions:
+Go to [menxia-reader.github.io/menxia](https://menxia-reader.github.io/menxia) (or your own fork's Pages URL). Fill in `owner/repo`, then paste a [fine-grained PAT](https://github.com/settings/personal-access-tokens/new) scoped to **that one repo** with three permissions:
 
 - **Contents: Read and write**
 - **Pull requests: Read and write** ← the one everyone forgets; without it the list 403s

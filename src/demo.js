@@ -63,7 +63,7 @@ merge 后作为门下 issue #13 的实现依据。不对外发布。
 
 ## 直达链
 
-[渲染版](https://charliezong18.github.io/menxia/?pr=999)
+[渲染版](https://menxia-reader.github.io/menxia/?pr=999)
 
 ## TLDR
 

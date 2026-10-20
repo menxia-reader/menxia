@@ -16,11 +16,11 @@ const thread = (path, line, quote, note, replies = []) => ({
 });
 
 test('头部带折号 / 标题 / PR 链接 / 深链 / 组装时间', () => {
-  const md = call({ deepLink: 'https://charliezong18.github.io/menxia?pr=42' });
+  const md = call({ deepLink: 'https://menxia-reader.github.io/menxia?pr=42' });
   assert.match(md, /# 携卷 · #42「某折」/);
   assert.match(md, /- 折号：#42/);
   assert.match(md, /- PR：https:\/\/github\.com\/x\/review\/pull\/42/);
-  assert.match(md, /- 门下深链：https:\/\/charliezong18\.github\.io\/menxia\?pr=42/);
+  assert.match(md, /- 门下深链：https:\/\/menxia-reader\.github\.io\/menxia\?pr=42/);
   assert.match(md, /- 组装于：2026-07-31 10:00/);
 });
 

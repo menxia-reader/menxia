@@ -17,7 +17,7 @@
 | Q7 | M1 阅读体验（字号/行距/表格/代码块） | 现状即默认，等你试用后说别扭点 | 调样式很便宜 |
 | Q8 | 8/8 试点结账 verdict | 自建已落地 → 改为验收 M1–M3 实际使用频次 | — |
 | Q9 | menxia repo 公开范围 | 代码公开、内容私有（现状） | 若要连代码也私有，Pages 得换付费或换托管 |
-| **Q10** | **PAT 与同源共享（双路 review 挖出的最高危项）**：`charliezong18.github.io` 上所有 Pages 共享同一 localStorage，Happy fork / happy-beta 任一被 XSS 或投毒就能读走门下的 token（私有 review 仓读+写），M2 的批注草稿同理 | **建个免费 GitHub organization 把门下挪过去**（`<org>.github.io/menxia`），origin 彻底隔离、零成本、不动代码；已先加 meta CSP 兜着 | 不挪＝接受这个风险，需书面记录；自定义域名同样治本但要买域名 |
+| **Q10** | **PAT 与同源共享（双路 review 挖出的最高危项）**：`charliezong18.github.io` 上所有 Pages 共享同一 localStorage，Happy fork / happy-beta 任一被 XSS 或投毒就能读走门下的 token（私有 review 仓读+写），M2 的批注草稿同理 | **建个免费 GitHub organization 把门下挪过去**（`<org>.github.io/menxia`），origin 彻底隔离、零成本、不动代码；已先加 meta CSP 兜着。**已执行（2026-10-19）**：仓已 transfer 到 `menxia-reader/menxia`，站点改为 `https://menxia-reader.github.io/menxia/`，旧址转发（保留 query/hash） | 不挪＝接受这个风险，需书面记录；自定义域名同样治本但要买域名 |
 
 ## 已定
 

@@ -261,7 +261,7 @@ merge 后作为实现依据。不对外发布。
 
 ## 直达链
 
-[渲染版](https://charliezong18.github.io/menxia/?pr=43)
+[渲染版](https://menxia-reader.github.io/menxia/?pr=43)
 
 ## TLDR
 
