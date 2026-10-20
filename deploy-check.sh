@@ -27,8 +27,8 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 
-REPO="${REPO:-charliezong18/menxia}"
-SITE="${SITE:-https://charliezong18.github.io/menxia}"
+REPO="${REPO:-menxia-reader/menxia}"
+SITE="${SITE:-https://menxia-reader.github.io/menxia}"
 TIMEOUT="${TIMEOUT:-600}"
 
 SHA="${1:-$(git rev-parse origin/main 2>/dev/null)}"
