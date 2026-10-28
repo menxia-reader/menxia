@@ -6,6 +6,7 @@ import {
 } from '../vendor/preact-standalone.mjs';
 import * as gh from './store.js';
 import { renderMarkdown, hydrateRelativeImages } from './render.js';
+import { hydrateMermaid } from './mermaid.js';
 import * as A from './anchor.js';
 import { demoApi, autoAnnotate } from './demo.js';
 import { buildIndex, searchIndex, prNumberOf, homeTabOf } from './search.js';
@@ -66,7 +67,7 @@ function deviceName() {
 // 子组件拆出去后曾漏登记，改 cards.js 不触发提示（2026-07-28 补）。
 const BUILD_FILES = ['index.html', 'src/style.css', 'src/ui.js', 'src/github.js', 'src/store.js', 'src/anchor.js',
   'src/render.js', 'src/link.js', 'src/search.js', 'src/lang.js', 'src/demo.js', 'src/strings.js',
-  'src/carry.js',
+  'src/carry.js', 'src/mermaid.js',
   'src/components/cards.js', 'src/components/setup.js', 'src/components/sidebar.js',
   'src/components/topbar.js', 'src/components/other-threads.js', 'src/components/zongpi-shown.js',
   'src/components/comment-body.js', 'src/components/folder-body.js', 'src/components/thread-view.js',
@@ -568,6 +569,7 @@ function App() {
           setVerifyN(decorateVerifyMarkers(el, S.verify.markerTip));
           await Promise.all([...el.querySelectorAll('.chapter-section')].map((sec) =>
             hydrateRelativeImages(sec, { docPath: sec.dataset.chapter, ref, fetchBlobUrl: api.getFileBlobUrl })));
+          await hydrateMermaid(el);
           if (dead) return;
           setDocTick((t) => t + 1);
           return;   // 通读态到此为止：不跑 jumpRef（那是单篇锚点的活）
@@ -590,6 +592,7 @@ function App() {
         // F13：渲染后在纯文本层给「需核实」标记加可见状态；返回本篇标记数供顶栏显示。
         setVerifyN(decorateVerifyMarkers(el, S.verify.markerTip));
         await hydrateRelativeImages(el, { docPath, ref, fetchBlobUrl: api.getFileBlobUrl });
+        await hydrateMermaid(el);
         if (dead) return;
         setDocTick((t) => t + 1);
         const jp = jumpRef.current;

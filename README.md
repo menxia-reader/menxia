@@ -180,6 +180,8 @@ src/render.js     markdown → HTML (blocks carry data-line for anchoring)
 src/style.css     rice paper / ink / cinnabar
 test/             unit + DOM + end-to-end, zero dependencies
 vendor/           markdown-it + htm/preact standalone (13KB), vendored — no npm, no lockfile
+                  (+ mermaid.min.js, loaded only by sandbox.html — ```mermaid fences render to SVG inside a sandboxed iframe, fall back to source offline)
+sandbox.html      sandboxed renderer shell (sandbox="allow-scripts", no PAT); protocol: {type:'mermaid',id,src,theme} → {type:'svg'|'error',id,…}
 ```
 
 ## Tests

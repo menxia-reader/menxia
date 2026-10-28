@@ -21,7 +21,7 @@
 // 版本号：**改任何应用壳文件后，把这里 +1**。它决定 cache 名，换名即让旧缓存在 activate 被清。
 // 与 ui.js 的 detectNewBuild 是两套独立机制（那个提示「有新版，点刷新」；这个管离线壳的失效），
 // 故意不耦合：detectNewBuild 依赖网络回源，SW 版本管的恰恰是没网时给谁。
-export const SW_VERSION = 'v5';
+export const SW_VERSION = 'v6';
 
 // cache 名带版本。同源多部署（GitHub Pages 只有一个源）下够用；换名 = 旧缓存 activate 即弃。
 export const cacheName = (version = SW_VERSION) => `menxia-shell-${version}`;

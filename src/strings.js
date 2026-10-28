@@ -304,6 +304,8 @@ export const S = deepFreeze({
     noMarkdown: '此折无 markdown 正文（代码 PR 的 diff 视图在北极星里）。',
     relLinkMissing: (path) => `这折里没有 ${path}`,
     imageMissing: (path) => `图取不到：${path}`,
+    mermaidAlt: 'mermaid 图',
+    mermaidFailed: (msg) => `mermaid 渲染失败，显示源码：${msg}`,
   },
 
   // rev 切换条 / 只读提示
