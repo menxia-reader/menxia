@@ -47,15 +47,28 @@ run_page_once() {
   local url="$1" log="$2" budget="$3" winsize="$4"
   local dir; dir="$(mktemp -d)"
   rm -f "$log"
+  # budget=real：不用虚拟时间，真时钟跑，等页面自己打出 RESULT 才收工。
+  # mermaid 渲在跨进程沙箱 iframe 里（要真下 3.5MB 脚本、真渲染），虚拟时钟不会等它，
+  # 实测 virtual-time 下 iframe 的 load 一直不触发——这类断言只能走真时钟。
+  # （--screenshot 一出图 Chrome 就退出，会把还在跑的页面脚本一起带走，所以真时钟模式不带它）
+  local vt="--virtual-time-budget=$budget" shot="--screenshot=$dir/shot.png"
+  [ "$budget" = "real" ] && { vt="--no-first-run"; shot="--no-default-browser-check"; }
   "$CHROME" --headless=new --disable-gpu --hide-scrollbars --enable-logging=stderr --v=0 \
     "${CI_FLAGS[@]+"${CI_FLAGS[@]}"}" \
-    --window-size="$winsize" --virtual-time-budget="$budget" \
-    --user-data-dir="$dir" --screenshot="$dir/shot.png" "$url" >/dev/null 2>"$log" &
+    --window-size="$winsize" "$vt" \
+    --user-data-dir="$dir" "$shot" "$url" >/dev/null 2>"$log" &
   local pid=$!
-  for _ in $(seq 1 60); do
-    [ -s "$dir/shot.png" ] && break
-    sleep 1
-  done
+  if [ "$budget" = "real" ]; then
+    for _ in $(seq 1 90); do
+      grep -q '\[mm\] RESULT' "$log" 2>/dev/null && break
+      sleep 1
+    done
+  else
+    for _ in $(seq 1 60); do
+      [ -s "$dir/shot.png" ] && break
+      sleep 1
+    done
+  fi
   sleep 2
   kill $pid 2>/dev/null
   rm -rf "$dir" 2>/dev/null || true
@@ -74,7 +87,7 @@ run_page() {
   for attempt in 1 2 3; do
     r0=$(grep -c '"GET ' "$LOGDIR/server.log" 2>/dev/null || true)
     run_page_once "$url" "$log" "$budget" "$winsize"
-    grep -qE '\[(dom|smoke|mobile|rail)\] ' "$log" 2>/dev/null && return 0
+    grep -qE '\[(dom|smoke|mobile|rail|mm)\] ' "$log" 2>/dev/null && return 0
     r1=$(grep -c '"GET ' "$LOGDIR/server.log" 2>/dev/null || true)
     echo "  ↻ ${url##*/} 页面零输出（第 ${attempt} 次，服务端收到 $((r1 - r0)) 个请求）——疑似虚拟时间在模块加载间隙耗尽"
   done
@@ -104,6 +117,7 @@ check_names() { # $1=tag(dom|smoke)  $2=logfile  $3=golden
 # 期望断言条数：钉死总数，断言被删/被跳过也要红
 DOM_EXPECT=38
 SMOKE_EXPECT=136
+MM_EXPECT=4
 MOBILE_EXPECT=31
 RAIL_EXPECT=10
 
@@ -129,7 +143,7 @@ fi
 
 if [ "$WHAT" = "all" ] || [ "$WHAT" = "smoke" ]; then
   echo "── 端到端冒烟（demo 免 token，真实事件路径划批 + rev 切换）──"
-  run_page "http://127.0.0.1:$PORT/index.html?demo=1&auto=1" "$LOGDIR/smoke.log" 30000
+  run_page "http://127.0.0.1:$PORT/index.html?demo=1&auto=1" "$LOGDIR/smoke.log" 45000
   grep -o '\[smoke\] [^"]*' "$LOGDIR/smoke.log" | sed 's/^/  /' || true
   RESULT=$(grep -o '\[smoke\] RESULT pass=[0-9]* fail=[0-9]*' "$LOGDIR/smoke.log" | tail -1)
   if [ -z "$RESULT" ]; then
@@ -181,6 +195,13 @@ if [ "$WHAT" = "all" ] || [ "$WHAT" = "smoke" ]; then
   grep -o '\[rail\] [^"]*' "$LOGDIR/rail.log" | sed 's/^/  /' || true
   RRAIL=$(grep -o '\[rail\] RESULT pass=[0-9]* fail=[0-9]*' "$LOGDIR/rail.log" | tail -1)
   if [ "$RRAIL" = "[rail] RESULT pass=$RAIL_EXPECT fail=0" ]; then echo "  ✔ $RRAIL"; else echo "  ✖ ${RRAIL}（期望 pass=$RAIL_EXPECT fail=0）"; STATUS=1; fi
+
+  # mermaid 沙箱渲图（#188 M1）：渲染在跨进程 iframe 里，单独一支、给足虚拟时间预算
+  echo "── mermaid 沙箱渲图（好图成 figure>img[blob:] / 坏图留源码+错误行 / sandbox 恰为 allow-scripts）──"
+  run_page "http://127.0.0.1:$PORT/index.html?demo=1&mm=1" "$LOGDIR/mm.log" real
+  grep -o '\[mm\] [^"]*' "$LOGDIR/mm.log" | sed 's/^/  /' || true
+  RMM=$(grep -o '\[mm\] RESULT pass=[0-9]* fail=[0-9]*' "$LOGDIR/mm.log" | tail -1)
+  if [ "$RMM" = "[mm] RESULT pass=$MM_EXPECT fail=0" ]; then echo "  ✔ $RMM"; else echo "  ✖ ${RMM}（期望 pass=$MM_EXPECT fail=0）"; STATUS=1; fi
 fi
 
 exit $STATUS

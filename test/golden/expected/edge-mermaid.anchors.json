@@ -1,0 +1,226 @@
+{
+  "format": 1,
+  "source": "corpus/edge-mermaid.md",
+  "anchors": [
+    {
+      "block": 0,
+      "blockStart": 0,
+      "length": 8,
+      "docStart": 0,
+      "expect": {
+        "blockLine": 1,
+        "line": 1,
+        "offset": 0,
+        "quote": "mermaid",
+        "quoteRaw": "mermaid"
+      },
+      "replay": {
+        "block": 0,
+        "start": 0,
+        "length": 7
+      }
+    },
+    {
+      "block": 1,
+      "blockStart": 0,
+      "length": 8,
+      "docStart": 11,
+      "expect": {
+        "blockLine": 3,
+        "line": 3,
+        "offset": 0,
+        "quote": "第一张图（锚点按",
+        "quoteRaw": "第一张图（锚点按"
+      },
+      "replay": {
+        "block": 1,
+        "start": 0,
+        "length": 8
+      }
+    },
+    {
+      "block": 2,
+      "blockStart": 0,
+      "length": 8,
+      "docStart": 43,
+      "expect": {
+        "blockLine": 5,
+        "line": 6,
+        "offset": 0,
+        "quote": "graph TD",
+        "quoteRaw": "graph TD"
+      },
+      "replay": {
+        "block": 2,
+        "start": 0,
+        "length": 8
+      }
+    },
+    {
+      "block": 3,
+      "blockStart": 0,
+      "length": 8,
+      "docStart": 71,
+      "expect": {
+        "blockLine": 10,
+        "line": 10,
+        "offset": 0,
+        "quote": "两图之间的段落。",
+        "quoteRaw": "两图之间的段落。"
+      },
+      "replay": {
+        "block": 3,
+        "start": 0,
+        "length": 8
+      }
+    },
+    {
+      "block": 4,
+      "blockStart": 0,
+      "length": 8,
+      "docStart": 80,
+      "expect": {
+        "blockLine": 12,
+        "line": 13,
+        "offset": 0,
+        "quote": "sequence",
+        "quoteRaw": "sequence"
+      },
+      "replay": {
+        "block": 4,
+        "start": 0,
+        "length": 8
+      }
+    },
+    {
+      "block": 5,
+      "blockStart": 0,
+      "length": 3,
+      "docStart": 115,
+      "expect": {
+        "blockLine": 17,
+        "line": 17,
+        "offset": 0,
+        "quote": "结尾。",
+        "quoteRaw": "结尾。"
+      },
+      "replay": {
+        "block": 5,
+        "start": 0,
+        "length": 3
+      }
+    },
+    {
+      "block": 2,
+      "blockStart": 9,
+      "length": 6,
+      "docStart": 52,
+      "expect": {
+        "blockLine": 5,
+        "line": 7,
+        "offset": 9,
+        "quote": "A[读折",
+        "quoteRaw": "A[读折"
+      },
+      "replay": {
+        "block": 2,
+        "start": 11,
+        "length": 4
+      }
+    },
+    {
+      "block": 4,
+      "blockStart": 16,
+      "length": 6,
+      "docStart": 96,
+      "expect": {
+        "blockLine": 12,
+        "line": 14,
+        "offset": 16,
+        "quote": "Alic",
+        "quoteRaw": "Alic"
+      },
+      "replay": {
+        "block": 4,
+        "start": 18,
+        "length": 4
+      }
+    },
+    {
+      "block": 0,
+      "blockStart": 0,
+      "length": 1,
+      "docStart": 0,
+      "expect": null,
+      "replay": null
+    }
+  ],
+  "reanchorByQuote": [
+    {
+      "quote": "mermaid 围栏",
+      "expect": 1
+    },
+    {
+      "quote": "第一张图（锚点按整个围栏，规则同",
+      "expect": 3
+    },
+    {
+      "quote": "graph TD A[读折] -",
+      "expect": 5
+    },
+    {
+      "quote": "两图之间的段落。",
+      "expect": 10
+    },
+    {
+      "quote": "sequenceDiagram ",
+      "expect": 12
+    },
+    {
+      "quote": "结尾。",
+      "expect": null
+    },
+    {
+      "quote": "",
+      "expect": null
+    },
+    {
+      "quote": "abc",
+      "expect": null
+    },
+    {
+      "quote": "  a  b  ",
+      "expect": null
+    },
+    {
+      "quote": "一定不在正文里的引文 zzz",
+      "expect": null
+    }
+  ],
+  "sectionOf": [
+    [
+      1,
+      "mermaid 围栏"
+    ],
+    [
+      3,
+      "mermaid 围栏"
+    ],
+    [
+      5,
+      "mermaid 围栏"
+    ],
+    [
+      10,
+      "mermaid 围栏"
+    ],
+    [
+      12,
+      "mermaid 围栏"
+    ],
+    [
+      17,
+      "mermaid 围栏"
+    ]
+  ]
+}

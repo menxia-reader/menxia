@@ -81,9 +81,14 @@ test('network-first 真回源：SW 的 fetch 带 networkCacheMode（no-cache）�
     'networkFirst 里的 fetch 必须带 cache: networkCacheMode(request)');
 });
 
-test('SW_VERSION 已为本次应用壳改动升到 v5（旧 menxia-shell-v4 在 activate 时被清）', () => {
-  assert.equal(SW_VERSION, 'v5');
-  assert.equal(cacheName(), 'menxia-shell-v5');
+test('SW_VERSION 已为本次应用壳改动升到 v6（旧 menxia-shell-v5 在 activate 时被清）', () => {
+  assert.equal(SW_VERSION, 'v6');
+  assert.equal(cacheName(), 'menxia-shell-v6');
+});
+
+test('isAppShell：沙箱壳 sandbox.html（destination=iframe）与 vendor/mermaid.min.js 进壳缓存', () => {
+  assert.equal(isAppShell(req(`${SELF}/menxia/sandbox.html`, { destination: 'iframe' })), true);
+  assert.equal(isAppShell(req(`${SELF}/menxia/vendor/mermaid.min.js`, { destination: 'script' })), true);
 });
 
 test('updateUrl：保留折号/篇/锚，只加时间戳 _v；重复点击覆盖而不叠加', () => {

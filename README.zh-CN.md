@@ -180,6 +180,8 @@ src/render.js     markdown → HTML（块级元素带 data-line 供锚定）
 src/style.css     宣纸 / 墨 / 朱砂
 test/             单元 + DOM + 端到端，零依赖
 vendor/           markdown-it + htm/preact standalone（13KB），vendored —— 无 npm、无 lockfile
+                  （+ mermaid.min.js，只由 sandbox.html 加载 —— ```mermaid 围栏在沙箱 iframe 里渲成 SVG，离线退回源码）
+sandbox.html      沙箱渲染壳（sandbox="allow-scripts"，无 PAT）；协议：{type:'mermaid',id,src,theme} → {type:'svg'|'error',id,…}
 ```
 
 全部应用代码约 900 行。依旧**零构建**（push 即部署），但不再是无框架：[量化闸门](MIGRATION-WATCH.zh-CN.md)于 2026-07-26 双指标触发（两条均被评审证实是事件／异步时序类 bug 的高发层），视图层按规矩迁到了免构建形态的 Preact。闸门用数字说话，我们照办。

@@ -1,0 +1,63 @@
+{
+  "format": 1,
+  "source": "corpus/edge-mermaid.md",
+  "blocks": [
+    {
+      "i": 0,
+      "type": "heading",
+      "tag": "h1",
+      "line": 1,
+      "lineEnd": 1,
+      "parent": null,
+      "level": 1,
+      "text": "mermaid 围栏"
+    },
+    {
+      "i": 1,
+      "type": "paragraph",
+      "tag": "p",
+      "line": 3,
+      "lineEnd": 3,
+      "parent": null,
+      "text": "第一张图（锚点按整个围栏，规则同普通 fence，不看语言）："
+    },
+    {
+      "i": 2,
+      "type": "fence",
+      "tag": "code",
+      "line": 5,
+      "lineEnd": 8,
+      "parent": null,
+      "info": "mermaid",
+      "text": "graph TD\n  A[读折] --> B[批注]\n"
+    },
+    {
+      "i": 3,
+      "type": "paragraph",
+      "tag": "p",
+      "line": 10,
+      "lineEnd": 10,
+      "parent": null,
+      "text": "两图之间的段落。"
+    },
+    {
+      "i": 4,
+      "type": "fence",
+      "tag": "code",
+      "line": 12,
+      "lineEnd": 15,
+      "parent": null,
+      "info": "mermaid",
+      "text": "sequenceDiagram\n  Alice->>Bob: hi\n"
+    },
+    {
+      "i": 5,
+      "type": "paragraph",
+      "tag": "p",
+      "line": 17,
+      "lineEnd": 17,
+      "parent": null,
+      "text": "结尾。"
+    }
+  ]
+}

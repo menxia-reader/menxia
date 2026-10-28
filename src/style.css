@@ -403,6 +403,7 @@ article th, article td { border: 1px solid var(--rule); padding: 9px 12px; text-
 article th { font-family: var(--songti); background: var(--chip); font-weight: 700; }
 /* cursor: zoom-in 是这个功能唯一的自发现入口——图能点开这件事没有别的地方写着 */
 article img { max-width: 100%; border: 1px solid var(--rule); border-radius: 9px; cursor: zoom-in; }
+article figure.mermaid-fig { margin: 1em 0; }   /* mermaid 围栏渲出的图（src/mermaid.js）；img 沿用上面的规则，可点开放大 */
 article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎报能放大（见 image-view.js） */
 
 .state { color: var(--ink-soft); font-size: 15px; padding: 8px 0; }

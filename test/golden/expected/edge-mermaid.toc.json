@@ -1,0 +1,21 @@
+{
+  "format": 1,
+  "source": "corpus/edge-mermaid.md",
+  "hasOutline": false,
+  "outline": [
+    {
+      "line": 1,
+      "level": 1,
+      "text": "mermaid 围栏",
+      "slug": "mermaid-围栏"
+    }
+  ],
+  "headings": [
+    {
+      "line": 1,
+      "level": 1,
+      "text": "mermaid 围栏",
+      "slug": "mermaid-围栏"
+    }
+  ]
+}

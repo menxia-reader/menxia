@@ -17,9 +17,9 @@ const walk = (dir) => readdirSync(dir).flatMap((f) => {
   return statSync(p).isDirectory() ? walk(p) : [relative(here, p)];
 });
 
-test('golden：语料 20–30 篇', () => {
+test('golden：语料 20–31 篇', () => {
   const n = readdirSync(join(here, 'corpus')).filter((f) => f.endsWith('.md')).length;
-  assert.ok(n >= 20 && n <= 30, `语料 ${n} 篇`);
+  assert.ok(n >= 20 && n <= 31, `语料 ${n} 篇`);
 });
 
 test('golden：已提交的 expected/ 与 manifest 不多不少', () => {

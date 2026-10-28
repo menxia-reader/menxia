@@ -48,6 +48,19 @@ ${Array.from({ length: 14 }, (_, i) => `第 ${i + 1} 段填充：读折台的滚
 -被删掉的旧行
 +新增进来的行
 \`\`\`
+
+## mermaid 渲染（冒烟用，别删）
+
+\`\`\`mermaid
+graph TD
+  A[读折] --> B[批注]
+\`\`\`
+
+下面这张故意写坏，渲染失败时必须保留源码围栏并出一行错误：
+
+\`\`\`mermaid
+this is not mermaid ???
+\`\`\`
 `;
 
 // 旧版正文：删掉「为什么要有 demo 模式」一节——rev 切换后正文明显变短（冒烟断言据此）
@@ -1327,6 +1340,7 @@ async function runSmoke(docEl) {
     chk('diff-add-visually-tinted', false, 'no block');
   }
 
+
   const ends = () => [...document.querySelectorAll('.scroll-end')];
   chk('scroll-ends-rendered', ends().length === 2, `n=${ends().length}`);
   // **位置就是这个部件的成败**：上一版摆在视口右下角、离正文 623px，他一百来折都没找着。
@@ -1463,6 +1477,33 @@ async function runSmoke(docEl) {
 //
 // 顺序照手机档的教训：先确认手柄真的可见，再拖。对着一个 display:none 的元素派发
 // pointer 事件不会报错，只会静默什么都不发生，于是断言可以全绿而功能根本没上。
+// ?demo=1&mm=1：mermaid 沙箱渲图（#188 M1）。单独一支而不并进主冒烟：渲染在跨进程的沙箱 iframe 里，
+// 它的真实耗时不推进 virtual-time，所以要放宽超时（ui.js 在 DEMO 下给 30s）并给足轮询。
+// 好图 → figure>img[blob:] 且行号锚不变；坏图 → 保留源码围栏 + 错误行；iframe 的 sandbox 恰为 allow-scripts。
+if (new URLSearchParams(location.search).get('mm') === '1') {
+  setTimeout(async () => {
+    let pass = 0, fail = 0;
+    const chk = (n, c, d = '') => { c ? pass++ : fail++; console.log(`[mm] ${c ? 'PASS' : 'FAIL'} ${n}${d ? ` — ${d}` : ''}`); };
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    for (let i = 0; i < 300 && !(document.querySelector('.mermaid-fig') && document.querySelector('.mermaid-err')); i++) await sleep(100);
+    const f = document.querySelector('iframe[title="menxia-sandbox"]');
+    const { mermaidState } = await import('./mermaid.js');
+    console.log(`[mm] DIAG loaded=${mermaidState.loaded} sent=${mermaidState.sent} replied=${mermaidState.replied} frame=${Boolean(f)} figs=${document.querySelectorAll('.mermaid-fig').length} pres=${document.querySelectorAll('pre > code.language-mermaid').length} errs=${[...document.querySelectorAll('.mermaid-err')].map((x) => x.textContent.slice(0, 80)).join('|')}`);
+    const img = document.querySelector('figure.mermaid-fig img');
+    chk('mermaid-rendered-as-figure-img', Boolean(img) && (img.getAttribute('src') || '').startsWith('blob:'),
+      `src=${img ? (img.getAttribute('src') || '').slice(0, 20) : 'none'}`);
+    const fence = DOC.split('\n').findIndex((l) => l.startsWith('```mermaid')) + 1;
+    const fig = document.querySelector('figure.mermaid-fig');
+    chk('mermaid-figure-keeps-data-line', Boolean(fig) && fig.getAttribute('data-line') === String(fence),
+      `fig=${fig ? fig.getAttribute('data-line') : 'none'} fence=${fence}`);
+    chk('mermaid-bad-fence-keeps-source-with-error',
+      Boolean(document.querySelector('pre > code.language-mermaid')) && Boolean(document.querySelector('.mermaid-err')));
+    chk('mermaid-iframe-sandbox-exactly-allow-scripts', Boolean(f) && f.getAttribute('sandbox') === 'allow-scripts',
+      `sandbox=${f ? f.getAttribute('sandbox') : 'none'}`);
+    console.log(`[mm] RESULT pass=${pass} fail=${fail}`);
+  }, 1500);
+}
+
 const RAIL = new URLSearchParams(location.search).get('rail');
 if (RAIL === '1') {
   setTimeout(async () => {

@@ -145,3 +145,52 @@ test('非 diff 语言的围栏不受影响（只 diff 走专用路径）', () =>
   assert.doesNotMatch(out, /diff-block/, 'js 围栏被误当 diff 渲染了');
   assert.match(out, /<pre[^>]*><code/, '普通围栏仍是 pre>code');
 });
+
+// ── mermaid 沙箱（#188 M1）──
+test('mermaid 围栏里的 <script> 走 fence 转义，不成活 DOM', () => {
+  const out = renderMarkdown('```mermaid\n<script>alert(1)</scr' + 'ipt>\n```');
+  assert.doesNotMatch(out, /<script/i, 'mermaid 源码里的 <script> 成活了');
+  assert.match(out, /language-mermaid/);
+});
+
+test('figureFor：figure 不含 script / foreignObject，img 以 blob: 开头，行号锚原样搬运', async () => {
+  const { figureFor } = await import('../src/mermaid.js');
+  // 最小假 DOM：只实现 figureFor 用到的面
+  const mk = (tag) => {
+    const attrs = {}; const kids = [];
+    return { tag, attrs, kids, className: '', src: '', alt: '',
+      setAttribute(k, v) { attrs[k] = v; }, getAttribute(k) { return k in attrs ? attrs[k] : null; },
+      appendChild(c) { kids.push(c); } };
+  };
+  const pre = { ownerDocument: { createElement: mk },
+    getAttribute: (k) => ({ 'data-line': '7', 'data-line-end': '12' }[k] ?? null) };
+  const fig = figureFor(pre, 'blob:https://x/abc', 'alt');
+  assert.equal(fig.className, 'mermaid-fig');
+  assert.equal(fig.attrs['data-line'], '7');
+  assert.equal(fig.attrs['data-line-end'], '12');
+  assert.ok(fig.kids[0].src.startsWith('blob:'));
+  const dump = JSON.stringify(fig);
+  assert.doesNotMatch(dump, /<script|<foreignObject/i);
+});
+
+test('hydrateMermaid：无 mermaid 围栏时不碰 document、不建 iframe', async () => {
+  const { hydrateMermaid } = await import('../src/mermaid.js');
+  let created = 0;
+  globalThis.document = { createElement() { created++; return {}; }, body: { appendChild() { created++; } } };
+  const container = { querySelectorAll: () => [] };
+  try {
+    await hydrateMermaid(container);
+    assert.equal(created, 0, '无围栏却创建了 iframe');
+  } finally { delete globalThis.document; }
+});
+
+test('src/mermaid.js 钉约定：sandbox="allow-scripts" 在，同源/弹窗/顶层导航权限都不在', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/mermaid.js', import.meta.url), 'utf8');
+  assert.match(src, /setAttribute\('sandbox', 'allow-scripts'\)/);
+  assert.ok(!src.includes('allow-same-origin'), '沙箱不得给同源权限');
+  assert.ok(!src.includes('allow-popups'));
+  assert.ok(!src.includes('allow-top-navigation'));
+  assert.ok(!/innerHTML/.test(src), 'svg 只进 Blob，不得 innerHTML');
+  assert.ok(/new Blob\(\[r\.svg\]/.test(src), 'svg 必须走 Blob');
+});

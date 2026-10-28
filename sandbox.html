@@ -1,0 +1,26 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://menxia-reader.github.io/menxia/vendor/ http://127.0.0.1:* http://localhost:*; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'">
+<title>menxia sandbox</title></head>
+<body>
+<script src="vendor/mermaid.min.js"></script>
+<script>
+  // 协议（M1 只有两种消息，M2/M3 只加不改）：
+  //   主页 → 壳：{ type: 'mermaid', id, src, theme: 'light'|'dark' }
+  //   壳 → 主页：{ type: 'svg', id, svg }  |  { type: 'error', id, message }
+  //   （height 消息 M1 不用：mermaid 结果以 <img> 回填，主页自己量高）
+  // 本页以 sandbox="allow-scripts" 嵌入（opaque origin，无 PAT、无 localStorage）。
+  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+  addEventListener('message', async (e) => {
+    const m = e.data || {};
+    if (m.type !== 'mermaid' || typeof m.src !== 'string') return;
+    try {
+      mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: m.theme === 'dark' ? 'dark' : 'default' });
+      const { svg } = await mermaid.render('m' + String(m.id).replace(/[^\w-]/g, ''), m.src);
+      e.source.postMessage({ type: 'svg', id: m.id, svg }, '*');
+    } catch (err) {
+      e.source.postMessage({ type: 'error', id: m.id, message: String(err && err.message || err) }, '*');
+    }
+  });
+</script>
+</body></html>
