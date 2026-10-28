@@ -1,6 +1,44 @@
 // 全文搜索（零后端）——现场拉取各折的 markdown 文本，客户端匹配。
 // 缓存进 localStorage、按 head sha 失效：第一次搜要翻折（有进度），之后基本即时。
 // 纯文本函数（findMatches / snippetAround / lineOfIndex）单测覆盖，拉取编排不进单测。
+import { isShelved } from './track.js';
+
+// 折号查询：纯数字或 `#数字`（`174` / `#174` / `# 174`），返回折号；否则 null。
+// 他记得的常常只有折号（「看 #174」），标题里却没有这串数——不认折号就永远搜不到。
+export function prNumberOf(query) {
+  const m = /^#?\s*(\d+)$/.exec((query || '').trim());
+  return m ? Number(m[1]) : null;
+}
+
+// 侧栏即输即过滤的判定：折号精确命中，或标题含该词（大小写不敏感）。空词全放行。
+export function matchesQuery(pr, query) {
+  const q = (query || '').trim();
+  if (!q) return true;
+  const n = prNumberOf(q);
+  if (n != null && pr.number === n) return true;
+  return pr.title.toLowerCase().includes(q.toLowerCase());
+}
+
+// 一折「住」在哪个栏：open 闲折在读毕书架，其余 open 在待审，已画可的在已画可栏
+// （已画可栏全列 merged，书架只是它的切面，所以 merged 一律报「已画可」——点过去一定看得见）。
+export function homeTabOf(pr) {
+  if (pr.merged_at) return 'done';
+  return isShelved(pr) ? 'shelf' : 'open';
+}
+
+// 当前栏之外的命中：给「这栏没有，别的栏有」用。`here` = 当前栏已列出的折（不重复报）。
+// 按 open → merged 序，去重，每条标明所在栏。
+export function hitsElsewhere(prs, donePrs, query, here = []) {
+  if (!(query || '').trim()) return [];
+  const seen = new Set(here.map((p) => p.number));
+  const out = [];
+  for (const pr of [...(prs || []), ...(donePrs || [])]) {
+    if (seen.has(pr.number) || !matchesQuery(pr, query)) continue;
+    seen.add(pr.number);
+    out.push({ pr, tab: homeTabOf(pr) });
+  }
+  return out;
+}
 
 const cacheKey = (num) => `zhupi.doccache.${num}`;
 
@@ -87,13 +125,19 @@ export function snippetAround(text, idx, qlen, width = 60) {
   return (s > ls ? '…' : '') + text.slice(s, e).trim() + (e < le ? '…' : '');
 }
 
-// 汇总：标题命中 + 正文命中，按折分组返回
+// 汇总：折号命中 + 标题命中 + 正文命中，按折分组返回；折号命中的那折排最前。
+// 折号查询（`7` / `#7`）不受「至少两个字」限制——一位数折号也是精确的。
 export function searchIndex(index, query) {
   const q = query.trim();
-  if (q.length < 2) return [];
+  const num = prNumberOf(q);
+  if (q.length < 2 && num == null) return [];
   const groups = [];
+  let numGroup = null;
   for (const { pr, files } of index) {
     const hits = [];
+    if (num != null && pr.number === num) {
+      hits.push({ kind: 'number', path: null, line: null, snippet: `#${pr.number} ${pr.title}` });
+    }
     if (pr.title.toLowerCase().includes(q.toLowerCase())) {
       hits.push({ kind: 'title', path: null, line: null, snippet: pr.title });
     }
@@ -106,7 +150,9 @@ export function searchIndex(index, query) {
         });
       }
     }
-    if (hits.length) groups.push({ pr, hits });
+    if (!hits.length) continue;
+    if (hits[0].kind === 'number') numGroup = { pr, hits };
+    else groups.push({ pr, hits });
   }
-  return groups;
+  return numGroup ? [numGroup, ...groups] : groups;
 }

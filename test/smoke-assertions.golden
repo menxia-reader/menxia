@@ -97,6 +97,7 @@ search-clear-restores
 search-hits-found
 search-input-exists
 search-jump-flash
+search-pr-number-cross-tab
 shown-threads>=1
 stale-empty-draft-opens-editor
 stale-empty-draft-still-clickable

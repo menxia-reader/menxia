@@ -214,6 +214,11 @@ export const S = deepFreeze({
     clear: '清',
     mergedSuffix: ' · 已画可',
     titleHit: '标题命中',
+    numberHit: '折号命中',
+    // 当前栏没有、别的栏有：列出来并标明在哪一栏（他按折号找 #174 时常不在当前栏）
+    elsewhereGroup: (n) => `其他栏 ${n} 折命中`,
+    elsewhereNoHere: (q) => `这一栏标题没有「${q}」，其他栏有——点击直达；回车搜全文。`,
+    tabName: { open: '待审', done: '已画可', shelf: '读毕书架' },
     lineHit: (file, line) => `${file} · 第 ${line} 行`,
     noResults: (q) => `没搜到「${q}」。`,
     noTitleMatch: (q) => `标题没有「${q}」——回车搜全文。`,

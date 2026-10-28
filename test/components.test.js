@@ -59,6 +59,34 @@ test('搜索框：Enter 触发搜索、Escape 清空——两个分支都不能�
   assert.deepEqual(calls, ['search', 'clear']);
 });
 
+test('侧栏：书架栏搜 174 → 不再只说「标题没有」，列出待审栏的 #174、标栏、点击切栏直达', () => {
+  const L = (...names) => names.map((name) => ({ name }));
+  const p174 = { number: 174, title: 'Hermes 语音外拨开通 SOP', labels: L('kind:读物', 'wait:你读'), updated_at: '2026-10-27T00:00:00Z' };
+  const opened = [];
+  const base = {
+    hits: null, searching: '', prs: [p174], donePrs: [], cur: null, demo: false, timeAgo: () => '',
+    onQuery: () => {}, onSearch: () => {}, onClearSearch: () => {}, onJumpToHit: () => {}, onTab: () => {},
+    onOpenPR: () => opened.push('plain'), onSettings: () => {},
+    onOpenElsewhere: (pr, t) => opened.push([pr.number, t]),
+  };
+  for (const q of ['174', '#174']) {
+    const tree = Sidebar({ ...base, q, tab: 'shelf' });
+    const block = find(tree, byClass('search-elsewhere'));
+    assert.ok(block, `${q}: 应列出其他栏命中`);
+    const item = find(block, (v) => v.props?.['data-elsewhere-tab']);
+    assert.equal(item.props['data-elsewhere-tab'], 'open');
+    find(item, byClass('pr-item')).props.onClick();
+  }
+  assert.deepEqual(opened, [[174, 'open'], [174, 'open']]);
+  // 当前栏就有 → 在本栏列，不再在「其他栏」重复
+  const here = Sidebar({ ...base, q: '#174', tab: 'open' });
+  assert.equal(find(here, byClass('search-elsewhere')), null);
+  assert.ok(find(here, byClass('pr-item')));
+  // 哪栏都没有 → 仍是原文案，没有其他栏块
+  const none = Sidebar({ ...base, q: '#999', tab: 'shelf' });
+  assert.equal(find(none, byClass('search-elsewhere')), null);
+});
+
 test('侧栏：demo 模式隐藏「设置 · 钥匙」（否则会清掉真钥匙）', () => {
   const base = {
     q: '', hits: null, searching: '', prs: [], donePrs: [], tab: 'open', cur: null,

@@ -4,6 +4,7 @@ import { html } from '../../vendor/preact-standalone.mjs';
 import { S } from '../strings.js';
 import { folderSummary, DECISIONS_TITLE } from './folder-body.js';
 import { splitShelf, shelfOf, kindOf, qianOf } from '../track.js';
+import { matchesQuery, hitsElsewhere, prNumberOf } from '../search.js';
 
 /**
  * 清单卡的摘要行（F1，2026-07-31）：一句 TLDR gist + 「待你拍板 · n 条」角标。
@@ -83,9 +84,10 @@ export function Sidebar({
   q, hits, searching, prs, donePrs, tab, cur, demo, timeAgo, checks = {}, verifyCounts = {},
   qian = null, onQian = () => {},
   onQuery, onSearch, onClearSearch, onJumpToHit, onTab, onOpenPR, onSettings, onDash,
-  onGripDown = null, onGripReset = null,
+  onOpenElsewhere = null, onGripDown = null, onGripReset = null,
 }) {
-  const match = (p) => !q.trim() || p.title.toLowerCase().includes(q.trim().toLowerCase());
+  // 即输即过滤：标题含词，或折号精确命中（`174` / `#174`）。
+  const match = (p) => matchesQuery(p, q);
   // 签集与「按签」跨状态清单。qian 非空 = 处在「按签」视图：把 open+merged 里挂该签的折
   // 一屏同列（在读的走朱脊/呈于、已画可的走方印/画可于，状态视觉全由 folderCard 现成表达）。
   const qCounts = qianCounts(prs, donePrs);
@@ -106,6 +108,20 @@ export function Sidebar({
   const list = tab === 'done' ? donePrs.filter(match) : tab === 'shelf' ? [...shelf.unread, ...shelf.done] : split.desk;
   const emptyMsg = tab === 'done' ? S.nav.emptyDone : tab === 'shelf' ? S.nav.emptyShelf : S.nav.emptyOpen;
   const card = (pr, extra = {}) => folderCard({ pr, cur, timeAgo, checks, verifyCounts, onOpenPR, ...extra });
+  // 过滤只看当前栏会漏：他在书架栏搜 #174，而那折在待审。当前栏没命中、或查的是折号时，
+  // 把别的栏的命中也列出来、标明在哪栏，点了切过去打开（2026-10-27 报告）。
+  const elsewhere = q.trim() && (!list.length || prNumberOf(q) != null)
+    ? hitsElsewhere(prs, donePrs, q, list) : [];
+  const openElsewhere = (pr, t) => (onOpenElsewhere ? onOpenElsewhere(pr, t) : onOpenPR(pr));
+  const elsewhereBlock = elsewhere.length ? html`
+          <div class="search-elsewhere">
+            <p class="shelf-group">${S.search.elsewhereGroup(elsewhere.length)}</p>
+            ${elsewhere.map(({ pr, tab: t }) => html`
+              <div class="elsewhere-item" key=${'e' + pr.number} data-elsewhere-tab=${t}>
+                <span class="kind-chip">${S.search.tabName[t]}</span>
+                ${folderCard({ pr, cur, timeAgo, checks, verifyCounts, onOpenPR: (p) => openElsewhere(p, t) })}
+              </div>`)}
+          </div>` : '';
   return html`
       <aside>
         <div class="brand-row"><span class="seal">${S.brand.seal}</span><span class="brand">${S.brand.name}</span></div>
@@ -124,7 +140,8 @@ export function Sidebar({
                 <div class="search-group-title">#${pr.number} ${pr.title}${pr.merged_at ? S.search.mergedSuffix : ''}</div>
                 ${hs.map((h, i) => html`
                   <button class="search-hit" key=${'h' + pr.number + '-' + i} onClick=${() => onJumpToHit(pr, h)}>
-                    ${h.kind === 'title' ? html`<span class="search-hit-meta">${S.search.titleHit}</span>`
+                    ${h.kind === 'number' ? html`<span class="search-hit-meta">${S.search.numberHit}</span>`
+                      : h.kind === 'title' ? html`<span class="search-hit-meta">${S.search.titleHit}</span>`
                       : html`<span class="search-hit-meta">${S.search.lineHit(h.path.split('/').pop(), h.line)}</span>`}
                     <span class="search-hit-snippet">${h.snippet}</span>
                   </button>`)}
@@ -152,7 +169,8 @@ export function Sidebar({
           ${onDash && html`<button class="list-tab dash-btn" title=${S.nav.dashTitle} onClick=${onDash}>${S.nav.dash}</button>`}
         </div>
         <nav id="pr-list" class=${tab === 'shelf' ? 'shelf-list' : ''}>
-          ${!list.length ? html`<p class="state">${q.trim() ? S.search.noTitleMatch(q.trim()) : emptyMsg}</p>`
+          ${!list.length ? html`<p class="state">${!q.trim() ? emptyMsg
+              : elsewhere.length ? S.search.elsewhereNoHere(q.trim()) : S.search.noTitleMatch(q.trim())}</p>${elsewhereBlock}`
             : tab !== 'shelf' ? list.map((pr) => card(pr))
             : html`
               ${shelf.unread.length ? html`
@@ -162,6 +180,7 @@ export function Sidebar({
               ${shelf.done.length ? html`
                 <p class="shelf-group">${S.shelf.doneGroup(shelf.done.length)}</p>
                 ${shelf.done.map((pr) => card(pr, { shelf: true }))}` : ''}`}
+          ${list.length ? elsewhereBlock : ''}
         </nav>`}
         ${!demo && html`<button class="settings" onClick=${onSettings}>${S.nav.settings}</button>`}
         ${/* 拖宽手柄。**逻辑一点都不在这儿**——本组件是纯展示只吃 props（文件头的约定），

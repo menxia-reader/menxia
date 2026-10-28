@@ -994,6 +994,25 @@ async function runSmoke(docEl) {
   document.querySelector('.search-clear')?.click();
   await sleep(200);
   chk('search-clear-restores', Boolean(document.querySelector('.list-tabs')));
+  // 折号即输即中、跨栏（2026-10-27：书架栏搜 174 只说「标题没有」，而 #174 在待审）。
+  // 切到书架栏搜 #999（它在待审）→ 不回车也该列出「其他栏」命中、标明待审，点了切回待审并打开。
+  if (si) {
+    document.querySelector('.list-tab[data-tab="shelf"]')?.click();
+    await sleep(150);
+    const setVal = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setVal.call(si, '#999');
+    si.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(150);
+  }
+  const elsewhere = document.querySelector('.search-elsewhere [data-elsewhere-tab="open"] .pr-item');
+  const elsewhereOk = Boolean(elsewhere) && elsewhere.textContent.includes('#999');
+  elsewhere?.click();
+  await sleep(300);
+  chk('search-pr-number-cross-tab',
+    elsewhereOk && Boolean(document.querySelector('.list-tab[data-tab="open"].active')),
+    `found=${elsewhereOk}`);
+  document.querySelector('.search-clear')?.click();
+  await sleep(200);
 
   // ── 签（按主题归堆，跨状态同架）─────────────────────────────────────
   // demo 里 #999(open) 与 #998(已画可) 共 签:旅行，#997(弘文馆) 挂 签:开发。
