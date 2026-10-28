@@ -264,7 +264,7 @@ const IMAGE_MIME = {
   svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
   gif: 'image/gif', webp: 'image/webp',
 };
-export const imageMimeOf = (path) => IMAGE_MIME[/\.([a-z0-9]+)$/i.exec(path || '')?.[1]?.toLowerCase()];
+const imageMimeOf =(path) => IMAGE_MIME[/\.([a-z0-9]+)$/i.exec(path || '')?.[1]?.toLowerCase()];
 
 // 私有仓的 raw.githubusercontent 不带凭证取不到（实测 404），图片必须走 API 拿 blob
 export const getFileBlobUrl = (path, ref) =>
