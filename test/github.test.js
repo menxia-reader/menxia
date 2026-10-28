@@ -67,6 +67,23 @@ test('文件路径分段编码：空格与 # 不截断请求', async () => {
   assert.ok(url.includes('/'), '目录分隔符不能被编码掉');
 });
 
+test('getFileBlobUrl: .svg 的 blob 被补成 image/svg+xml（GitHub raw 回的 type 不对）', async () => {
+  stubFetch(() => ok(new Blob(['<svg xmlns="http://www.w3.org/2000/svg"/>'], { type: 'application/vnd.github.raw' })));
+  const seen = [];
+  const orig = URL.createObjectURL;
+  URL.createObjectURL = (b) => { seen.push(b); return 'blob:stub'; };
+  try {
+    await gh.getFileBlobUrl('docs/assets/x.svg', 'sha1');
+    await gh.getFileBlobUrl('docs/assets/y.PNG', 'sha1');
+    const raw = new Blob(['x'], { type: 'application/vnd.github.raw' });
+    stubFetch(() => ok(raw));
+    await gh.getFileBlobUrl('docs/assets/z.bin', 'sha1');
+    assert.equal(seen[0].type, 'image/svg+xml');
+    assert.equal(seen[1].type, 'image/png');
+    assert.equal(seen[2], raw, '未知扩展名保持原 blob');
+  } finally { URL.createObjectURL = orig; }
+});
+
 test('listPRFiles / listPRComments 分页取全：满页续拉、不满页停', async () => {
   const page1 = Array.from({ length: 100 }, (_, i) => ({ id: i }));
   // 用调用序号判页，别用 url.includes('page=1')——`per_page=100` 里就含这个子串
