@@ -103,7 +103,7 @@ check_names() { # $1=tag(dom|smoke)  $2=logfile  $3=golden
 
 # 期望断言条数：钉死总数，断言被删/被跳过也要红
 DOM_EXPECT=38
-SMOKE_EXPECT=135
+SMOKE_EXPECT=136
 MOBILE_EXPECT=31
 RAIL_EXPECT=10
 
