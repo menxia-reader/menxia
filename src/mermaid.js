@@ -23,7 +23,8 @@ export function figureFor(pre, blobUrl, alt) {
   const fig = doc.createElement('figure');
   fig.className = 'mermaid-fig';
   for (const k of ['data-line', 'data-line-end']) {
-    const v = pre.getAttribute(k);
+    // 默认 fence 把行号打在 <code> 上（见 dom.test「fence 行号落在 <code> 上」），pre 上通常没有
+    const v = pre.getAttribute(k) ?? pre.querySelector?.('code')?.getAttribute(k) ?? null;
     if (v != null) fig.setAttribute(k, v);
   }
   const img = doc.createElement('img');
@@ -32,6 +33,9 @@ export function figureFor(pre, blobUrl, alt) {
   fig.appendChild(img);
   return fig;
 }
+
+// 诊断用（冒烟 mm 层读它，定位"沙箱没应答"是没加载、没发出还是没回）
+export const mermaidState = { loaded: null, sent: 0, replied: 0, errors: 0 };
 
 // ── 沙箱 iframe 单例 ───────────────────────────────────────────────
 let frame = null;       // { iframe, ready }
@@ -44,6 +48,7 @@ function listen() {
     if (!frame || e.source !== frame.iframe.contentWindow) return;
     const m = e.data || {};
     const p = pending.get(m.id);
+    mermaidState.replied++;
     if (!p) return;
     if (m.type === 'svg' && typeof m.svg === 'string') p.resolve({ svg: m.svg });
     else if (m.type === 'error') p.resolve({ error: String(m.message || '') });
@@ -56,10 +61,14 @@ function ensureFrame() {
   iframe.setAttribute('sandbox', 'allow-scripts');
   iframe.setAttribute('src', './sandbox.html');
   iframe.setAttribute('title', 'menxia-sandbox');
-  iframe.hidden = true;
+  // 不能 hidden（display:none 下 mermaid 量不出文字尺寸）：移出屏幕但保持有布局。
+  // 走 CSSOM 而非 style 属性，主页 CSP style-src 'self' 不允许内联样式属性。
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.tabIndex = -1;
+  Object.assign(iframe.style, { position: 'fixed', left: '-10000px', top: '0', width: '1024px', height: '768px', border: '0', visibility: 'hidden' });
   const ready = new Promise((resolve) => {
-    iframe.addEventListener('load', () => resolve(true), { once: true });
-    iframe.addEventListener('error', () => resolve(false), { once: true });
+    iframe.addEventListener('load', () => { mermaidState.loaded = true; resolve(true); }, { once: true });
+    iframe.addEventListener('error', () => { mermaidState.loaded = false; resolve(false); }, { once: true });
   });
   document.body.appendChild(iframe);
   frame = { iframe, ready };
@@ -71,11 +80,12 @@ function currentTheme() {
   return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
-function renderInSandbox(f, src, theme) {
+function renderInSandbox(f, src, theme, timeoutMs) {
   const id = 'mm' + (++seq);
   return new Promise((resolve) => {
-    const timer = setTimeout(() => { pending.delete(id); resolve({ error: 'timeout' }); }, MERMAID_TIMEOUT_MS);
+    const timer = setTimeout(() => { pending.delete(id); resolve({ error: 'timeout' }); }, timeoutMs);
     pending.set(id, { resolve: (r) => { clearTimeout(timer); pending.delete(id); resolve(r); } });
+    mermaidState.sent++;
     f.iframe.contentWindow.postMessage({ type: 'mermaid', id, src, theme }, '*');
   });
 }
@@ -89,7 +99,8 @@ function markFailed(pre, msg) {
 }
 
 // 无围栏时不创建 iframe、不加载 mermaid
-export async function hydrateMermaid(container, { theme } = {}) {
+// timeoutMs 只给无头冒烟放宽：virtual-time 下跨进程 iframe 的真实渲染耗时不推进虚拟时钟，3s 会先到
+export async function hydrateMermaid(container, { theme, timeoutMs = MERMAID_TIMEOUT_MS } = {}) {
   const blocks = findMermaidBlocks(container);
   if (!blocks.length) return;
   const f = ensureFrame();
@@ -97,11 +108,16 @@ export async function hydrateMermaid(container, { theme } = {}) {
   if (!ok) { blocks.forEach((b) => markFailed(b.pre, 'sandbox')); return; }
   const th = theme || currentTheme();
   for (const b of blocks) {
-    const r = await renderInSandbox(f, b.src, th);
+    const r = await renderInSandbox(f, b.src, th, timeoutMs);
     if (!b.pre.isConnected) continue;   // 渲染期间换了文档
     if (r.svg) {
       const url = URL.createObjectURL(new Blob([r.svg], { type: 'image/svg+xml' }));
-      b.pre.replaceWith(figureFor(b.pre, url, S.doc.mermaidAlt));
+      const fig = figureFor(b.pre, url, S.doc.mermaidAlt);
+      // mermaid 的 svg 根上是 width="100%"，当 <img> 用会被拉满栏宽放大；按 viewBox 的固有宽度定尺寸，
+      // 太宽时由 article img 的 max-width:100% 兜住（走 CSSOM，主页 CSP 不许内联 style 属性）
+      const vb = /viewBox="[-\d.]+[ ,]+[-\d.]+[ ,]+([\d.]+)[ ,]+[\d.]+"/.exec(r.svg);
+      if (vb) fig.querySelector('img').style.width = `${Math.round(parseFloat(vb[1]))}px`;
+      b.pre.replaceWith(fig);
     } else {
       markFailed(b.pre, r.error || 'error');
     }

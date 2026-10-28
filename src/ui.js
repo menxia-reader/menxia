@@ -569,9 +569,10 @@ function App() {
           setVerifyN(decorateVerifyMarkers(el, S.verify.markerTip));
           await Promise.all([...el.querySelectorAll('.chapter-section')].map((sec) =>
             hydrateRelativeImages(sec, { docPath: sec.dataset.chapter, ref, fetchBlobUrl: api.getFileBlobUrl })));
-          await hydrateMermaid(el);
           if (dead) return;
           setDocTick((t) => t + 1);
+          // 渲图在 tick 之后异步做（沙箱加载慢不拖大纲/批注卡），做完再 tick 一次重排
+          hydrateMermaid(el, DEMO ? { timeoutMs: 30000 } : {}).then(() => { if (!dead) setDocTick((t) => t + 1); });
           return;   // 通读态到此为止：不跑 jumpRef（那是单篇锚点的活）
         }
 
@@ -592,9 +593,10 @@ function App() {
         // F13：渲染后在纯文本层给「需核实」标记加可见状态；返回本篇标记数供顶栏显示。
         setVerifyN(decorateVerifyMarkers(el, S.verify.markerTip));
         await hydrateRelativeImages(el, { docPath, ref, fetchBlobUrl: api.getFileBlobUrl });
-        await hydrateMermaid(el);
         if (dead) return;
         setDocTick((t) => t + 1);
+        // 渲图在 tick 之后异步做（沙箱加载慢不拖大纲/批注卡），做完再 tick 一次重排
+        hydrateMermaid(el, DEMO ? { timeoutMs: 30000 } : {}).then(() => { if (!dead) setDocTick((t) => t + 1); });
         const jp = jumpRef.current;
         if (jp && jp.prNumber === cur.pr.number && (!jp.path || jp.path === docPath)) {
           jumpRef.current = null;

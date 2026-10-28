@@ -173,6 +173,17 @@ test('figureFor：figure 不含 script / foreignObject，img 以 blob: 开头，
   assert.doesNotMatch(dump, /<script|<foreignObject/i);
 });
 
+test('hydrateMermaid：无 mermaid 围栏时不碰 document、不建 iframe', async () => {
+  const { hydrateMermaid } = await import('../src/mermaid.js');
+  let created = 0;
+  globalThis.document = { createElement() { created++; return {}; }, body: { appendChild() { created++; } } };
+  const container = { querySelectorAll: () => [] };
+  try {
+    await hydrateMermaid(container);
+    assert.equal(created, 0, '无围栏却创建了 iframe');
+  } finally { delete globalThis.document; }
+});
+
 test('src/mermaid.js 钉约定：sandbox="allow-scripts" 在，同源/弹窗/顶层导航权限都不在', async () => {
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../src/mermaid.js', import.meta.url), 'utf8');

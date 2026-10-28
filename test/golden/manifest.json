@@ -10,6 +10,7 @@
     "corpus/edge-images-headings.md": "020947ee4c9b5c7b3e06b75456edb1129473c1f67a6d2da0c98e64287d26cb4e",
     "corpus/edge-linkify.md": "8534433458af27f3f0416df06f378075e7f04ca8f686b6198edcc4575bb369da",
     "corpus/edge-lists.md": "c24c7172523a33e534ba8c96811c6a0477e31308d48c5d891c875d9640f976dc",
+    "corpus/edge-mermaid.md": "a83522c07e5284216f46285af61924131962fdf458ebf025f860b95af4cd66cb",
     "corpus/edge-mixed.md": "bfa9344a58355a7aab771d6fd0d8523b7379d46951d5cdf87e4eca1779fc0035",
     "corpus/edge-raw-html.md": "fd161b37a57be02aabc3fa4084e98190382b3875d48a53958368c58e21551c8e",
     "corpus/edge-tables.md": "c48f89136e8387a0c6adecdc7fbb4398eb40ec17e1b2f33c0998de8f3304210b",
@@ -60,6 +61,9 @@
     "expected/edge-lists.anchors.json": "8aee0dd919aae915782db10c161e785dd2d239141613b34542d1fd902bcc6911",
     "expected/edge-lists.blocks.json": "0f68371c26f6c9210b46832fa21f291e6304d1082a7c4cb33c6c2e2e3f6b4d2b",
     "expected/edge-lists.toc.json": "f2235e358f41aa06868f26c30770fa913a8217c4e089679019e786a9ad16eca9",
+    "expected/edge-mermaid.anchors.json": "9ff0d7062929cfd262132689db3f0e1cea834671da26bc4d937f6db6e0778295",
+    "expected/edge-mermaid.blocks.json": "c1c8de3f5459de30569a69e6bdfb2c24a41b6938ecbf5b40266d89db534d178a",
+    "expected/edge-mermaid.toc.json": "d4e4d5c787d5ec8895ebef889984d69fd1afa4707f8070fcc84345020362a5dd",
     "expected/edge-mixed.anchors.json": "1e972cd2b642b92f919e180ee00fb017afdc220e4623113a8f4f3b3fc398af36",
     "expected/edge-mixed.blocks.json": "1ce77051565c3fdbabf887a1631fe72617b740207e2623d387e17b8198a1694b",
     "expected/edge-mixed.toc.json": "0d02a474a5395925c32a02a921243a7ab66fa4ad9bb74b34eb3d7a7262930831",
@@ -181,6 +185,11 @@
     {
       "name": "edge-lists.md",
       "blocks": 30,
+      "crlf": false
+    },
+    {
+      "name": "edge-mermaid.md",
+      "blocks": 6,
       "crlf": false
     },
     {
