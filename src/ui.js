@@ -8,7 +8,7 @@ import * as gh from './store.js';
 import { renderMarkdown, hydrateRelativeImages } from './render.js';
 import * as A from './anchor.js';
 import { demoApi, autoAnnotate } from './demo.js';
-import { buildIndex, searchIndex } from './search.js';
+import { buildIndex, searchIndex, prNumberOf, homeTabOf } from './search.js';
 import { decorateVerifyMarkers, countVerifyMarkers } from './verify.js';
 import { parseZhupiLink, buildRef, parseDeepLink, buildDeepLink, parseHappySession, resolveRelativeDocLink } from './link.js';
 import { siblingFor, visibleDocs, getLang, setLang, variantOf } from './lang.js';
@@ -1026,7 +1026,7 @@ function App() {
   // ── 搜索：标题即输即filter；回车翻全折全文（含归档），命中点击直达段落 ──
   async function runSearch() {
     const query = q.trim();
-    if (query.length < 2) return say(S.search.tooShort);
+    if (query.length < 2 && prNumberOf(query) == null) return say(S.search.tooShort);
     const all = [...prs, ...donePrs];
     if (!indexRef.current) {
       setSearching(S.search.indexing);
@@ -1128,8 +1128,8 @@ function App() {
   function jumpToHit(pr, hit) {
     if (pr.number === cur?.pr?.number) return jumpTo({ prNumber: pr.number, path: hit.path, line: hit.line });
     jumpRef.current = hit.path ? { prNumber: pr.number, path: hit.path, line: hit.line || 1 } : null;
-    // 归档折点进去自动切到已画可栏，视觉上不跳戏
-    setTab(pr.merged_at ? 'done' : 'open');
+    // 点进去自动切到该折所在的栏（归档→已画可，open 闲折→读毕书架），视觉上不跳戏
+    setTab(homeTabOf(pr));
     openPR(pr);
   }
 
@@ -1641,6 +1641,7 @@ function App() {
         onQuery=${(v) => { setQ(v); if (hits) setHits(null); }}
         onSearch=${runSearch} onClearSearch=${clearSearch} onJumpToHit=${jumpToHit}
         onTab=${(t) => { setTab(t); setDash(false); }} onOpenPR=${(pr) => { setDash(false); openPR(pr); }}
+        onOpenElsewhere=${(pr, t) => { setTab(t); setDash(false); openPR(pr); }}
         onDash=${() => setDash((d) => !d)}
         onSettings=${() => { setPhase('setup'); setSetupMsg(''); }}
         onGripDown=${onGripDown} onGripReset=${onGripReset} />
