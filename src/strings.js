@@ -50,7 +50,7 @@ export const S = deepFreeze({
     copyRef: '引用此处',
     copyRefTitle: '拷涂归直达链（按住 Alt 拷 GitHub 链接）',
     happy: '回奏',
-    happyTitle: '回到呈这折的 Happy 奏对，说一句「读批注」（会话可能已散，那就只剩存档可看）',
+    happyTitle: '回到呈这折的 Hermes 会话，说一句「读批注」（会话可能已散，那就只剩存档可看）',
     zongpi: '判',
     zongpiArchivedTitle: '归档折仍可留判（划句批注才需要活折）',
     submit: (n) => `提交涂归 · ${n}`,
@@ -411,13 +411,13 @@ export const S = deepFreeze({
     emptyNotes: (n) => `还有 ${n} 条涂归没写内容（空批注不呈）——写完或作罢它们再提交。`,
     fallbackBody: (joined) => `以下涂归锚定不到可批注行（或写于旧版本），并入判：\n\n${joined}`,
     inlineBody: (n) => `门下 · ${n} 条`,
-    done: (inlineN, fallbackN) => `已呈回 ${inlineN} 条涂归${fallbackN ? `（${fallbackN} 条并入判）` : ''}——回 Happy 说「读批注」。`,
+    done: (inlineN, fallbackN) => `已呈回 ${inlineN} 条涂归${fallbackN ? `（${fallbackN} 条并入判）` : ''}——回 Hermes 说「读批注」。`,
     failed: (msg) => `呈递失败（草稿都还在）：${msg}`,
   },
 
   // 呈判
   zongpi: {
-    sent: '判已呈——回 Happy 说「读批注」。',
+    sent: '判已呈——回 Hermes 说「读批注」。',
     queued: '离线，判已存入待发——联网后自动补发。',
     failed: (msg) => `判呈递失败：${msg}`,
   },
@@ -436,10 +436,10 @@ export const S = deepFreeze({
     oldRevBlocked: '正在读旧版——画可定的是最新版，先切回 head 再画可。',
     pendingDraftsWarn: (n) => `\n注意：还有 ${n} 条涂归草稿没呈回，merge 之后就没处提交了。`,
     confirm: (n, title, warn) => `画可定稿：squash merge #${n}「${title}」？${warn}`,
-    done: (n) => `已画可：#${n} 定稿归档，文档留在这儿随你复制。对外交付回 Happy 说一声。`,
+    done: (n) => `已画可：#${n} 定稿归档，文档留在这儿随你复制。对外交付回 Hermes 说一声。`,
     nextUp: (n, title) => `下一折 #${n}「${title.length > 18 ? `${title.slice(0, 18)}…` : title}」→`,
     nextUpTitle: '待审队首。画可不再自动跳折——点这儿才走。',
     queueEmpty: '待审已空。',
-    failed: (msg, isDraft, n) => `画可失败：${msg}${isDraft ? `（此折是 draft；若是 GraphQL 被钥匙拒了，回 Happy 说「画可 #${n}」我来执行）` : ''}`,
+    failed: (msg, isDraft, n) => `画可失败：${msg}${isDraft ? `（此折是 draft；若是 GraphQL 被钥匙拒了，回 Hermes 说「画可 #${n}」我来执行）` : ''}`,
   },
 });
