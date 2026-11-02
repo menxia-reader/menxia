@@ -1326,15 +1326,20 @@ function App() {
   const navChapters = cur?.docs ? chapterList(docNames, docPath, curLangOf) : [];
 
   // 回折清单（手机三层导航的最上一层）。与 onRefresh 的清空同一套，只是不重拉列表。
+  // 换页都要回顶：手机是整页单轴滚动，读到第 N 屏点「‹ 目录」时 scrollY 原样留着，
+  // 目录页顶上的「‹ 全部折子」就停在视口上方——人只看见一列节和底栏「‹ 正文」，
+  // 以为没路回清单（2026-09-23 Charlie 手机报）。在 set 之前滚：此刻正文还在版面上，
+  // 滚到 0 必然生效；新页随后渲染时已经在顶上。不加 hook（F19：这里在早退之后）。
+  const toTop = () => scroller().scrollTo({ top: 0 });
   // P0：进折时压过栈（手机档）就走 history.back()，与侧滑返回同一条路——栈不漂、清单回原位。
   const backToList = () => {
     if (history.state?.menxia === 'folder') { history.back(); return; }
-    setNavOpen(false); setCur(null); setDocPath(null); setDash(false);
+    toTop(); setNavOpen(false); setCur(null); setDocPath(null); setDash(false);
   };
   // 这折里没有篇也没有节时，目录页只剩一行「‹ 全部折子」——那是个死胡同页，
   // 不如让「‹ 目录」直接回清单。规则讲得通：目录给你看这层里面有什么，里面空的就退回上一层。
   const hasNav = navChapters.length > 1 || showOutline;
-  const onNavBtn = () => (hasNav ? setNavOpen(true) : backToList());
+  const onNavBtn = () => (hasNav ? (toTop(), setNavOpen(true)) : backToList());
   // 点一节：先关目录页，等正文真的回到版面上再滚。
   // flashTo 靠 scrollIntoView 定位，而正文在目录页开着时是 display:none —— 几何全是 0，
   // 滚不动也闪不出来。**不能用 requestAnimationFrame 兜**：实测那一帧里 DOM 还没换完，
