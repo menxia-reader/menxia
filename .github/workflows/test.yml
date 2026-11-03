@@ -32,8 +32,6 @@ jobs:
           node-version: '22'
       - uses: browser-actions/setup-chrome@v1
         id: setup-chrome
-        with:
-          chrome-version: 1734262   # TMPDIAG：钉住两次失败所用的快照，复现后移除
       - run: chmod +x test/*.sh
       - run: ./test/run-browser.sh
         env:

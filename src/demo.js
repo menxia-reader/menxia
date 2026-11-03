@@ -610,14 +610,6 @@ export async function autoAnnotate(docEl) {
 
 async function runSmoke(docEl) {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  // TMPDIAG
-  const t0 = performance.now();
-  const T = () => Math.round(performance.now() - t0);
-  console.log(`[smoke] TMPDIAG start art=${getComputedStyle(document.documentElement).getPropertyValue('--art-w')} inline=${document.documentElement.style.getPropertyValue('--art-w')} w=${innerWidth}`);
-  new MutationObserver(() => console.log(`[smoke] TMPDIAG t=${T()} rootstyle=${document.documentElement.getAttribute('style')}`))
-    .observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
-  document.addEventListener('scroll', (e) => console.log(`[smoke] TMPDIAG t=${T()} scroll ${e.target.className || e.target.nodeName} top=${e.target.scrollTop}`), true);
-  window.addEventListener('resize', () => console.log(`[smoke] TMPDIAG t=${T()} resize w=${innerWidth}`));
   const rangeFor = (text) => {
     const block = [...docEl.querySelectorAll('[data-line]')].find((b) => b.textContent.includes(text));
     if (!block) return null;
@@ -649,9 +641,14 @@ async function runSmoke(docEl) {
       await sleep(25);
     }
   };
-  // 等两帧（兜底 150ms）：scroll 事件是在下一帧才派发的，等它落地再往下走。
+  // 等两帧：scroll 事件是在下一帧才派发的，等它落地再往下走。
+  // 2026-11-03 兜底由 150ms 放到 1000ms（main CI 两次红，#27 正文跟随窗口后 1440 下正文 620→762，
+  // Linux 字体下第一轮 pick 的编辑器 focus 要把 .work 滚到 885）：headless 的帧很稀疏，CI 实测
+  // 编辑器 focus 引起的 scroll 事件晚到 ~500ms（t=17390 点浮钮 → t=17900 才派发），150ms 的
+  // 兜底先赢，settle 在**那一帧之前**就返回了，滚动落在下一轮浮钮出现之后 → 浮钮被收、草稿少一条。
+  // 兜底只防 rAF 永远不来（页面被挂起）卡死；正常情况两帧一到就返回，不会多等。
   const settle = () => Promise.race([
-    new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))), sleep(150)]);
+    new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))), sleep(1000)]);
   const pick = async (text, note, save) => {
     // 2026-10-15 加（CI 10/12、10/14 两次红，日志都是「pick 等不到浮批钮：const DEBOUNCE_M」，
     // 下游 3～6 条断言连坐）：上一轮 pick 打开的编辑器是在 useEffect + setTimeout(0) 里才
@@ -660,7 +657,6 @@ async function runSmoke(docEl) {
     // 浮钮出现**之后**，ui.js 的捕获期 onScroll 当场 setFloat(null)，浮钮再也不回来。
     // 所以开划之前先让上一轮的滚动落地。
     await settle();
-    console.log(`[smoke] TMPDIAG t=${T()} pick-begin ${text.slice(0, 8)}`);
     const r = rangeFor(text);
     // 三处「等不到」以前全是静默 return/跳过，失败现场离报错点隔着好几条断言。
     // 现在各自出一句诊断——**不带 PASS/FAIL 前缀**，所以不进 smoke 的 golden 名单，
@@ -684,7 +680,6 @@ async function runSmoke(docEl) {
         + ` active=${ae?.tagName}.${ae?.className || ''} workTop=${document.querySelector('.work')?.scrollTop}`);
       return;
     }
-    console.log(`[smoke] TMPDIAG t=${T()} float-ok ${text.slice(0, 8)}`);
     float.click();
     await sleep(120);
     const ta = document.querySelector('.anno-input')
