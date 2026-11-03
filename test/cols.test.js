@@ -12,6 +12,8 @@ import {
   ART_MIN, ART_DEFAULT, TOC_MIN, TOC_DEFAULT,
   ART_MIN_WINDOW, TOC_MIN_WINDOW, ART_KEY, TOC_KEY,
   isColResizable, colSlack, colMax, clampCol,
+  WIDTH_PRESETS, DEFAULT_WIDTH_PRESET, WIDTH_KEY, MEDIUM_W, NARROW_W, INDENT_KEY,
+  normWidthPreset, nextWidthPreset, fluidPad, fluidArt, artCap,
 } from '../src/cols.js';
 
 const CSS = readFileSync(
@@ -19,7 +21,9 @@ const CSS = readFileSync(
 );
 
 test('默认值与 style.css :root 同步（失同步会让双击归位跳一下）', () => {
-  assert.match(CSS, new RegExp(`--art-w:\\s*${ART_DEFAULT}px`));
+  // 2026-11-03 起 --art-w 默认取 --art-base（JS 覆盖 --art-w 后仍要能读到 CSS 默认）
+  assert.match(CSS, new RegExp(`--art-base:\\s*${ART_DEFAULT}px`));
+  assert.match(CSS, /--art-w:\s*var\(--art-base\)/);
   assert.match(CSS, new RegExp(`--toc-w:\\s*${TOC_DEFAULT}px`));
 });
 
@@ -86,6 +90,106 @@ test('两栏的 storage key 不能撞（撞了就是拉正文连大纲一起动�
   assert.notEqual(ART_KEY, TOC_KEY);
   assert.match(ART_KEY, /^zhupi\./);
   assert.match(TOC_KEY, /^zhupi\./);
+});
+
+// ── 阅读宽度档（2026-11-03）：正文默认跟随窗口 ──
+
+test('档位：默认铺满；坏值归默认；轮换 铺满→适中→窄→铺满', () => {
+  assert.deepEqual(WIDTH_PRESETS, ['fill', 'medium', 'narrow']);
+  assert.equal(DEFAULT_WIDTH_PRESET, 'fill');
+  for (const bad of [null, undefined, '', 'wide', 0]) assert.equal(normWidthPreset(bad), 'fill');
+  assert.equal(nextWidthPreset('fill'), 'medium');
+  assert.equal(nextWidthPreset('medium'), 'narrow');
+  assert.equal(nextWidthPreset('narrow'), 'fill');
+  assert.equal(nextWidthPreset('garbage'), 'medium');
+  assert.equal(MEDIUM_W, 900);
+  assert.equal(NARROW_W, 680);
+  assert.match(WIDTH_KEY, /^zhupi\./);
+  assert.ok(![ART_KEY, TOC_KEY, INDENT_KEY].includes(WIDTH_KEY));
+});
+
+test('比例留白＝max(24, 工作区宽 × 4%)', () => {
+  assert.equal(fluidPad(400), 24);
+  assert.equal(fluidPad(600), 24);
+  assert.equal(fluidPad(2260), 90.4);
+});
+
+// 1920 全屏、左栏 300、有大纲（≥1710 默认几何）：版心＝缩进26+正文680+间距34+眉批300+大纲槽294
+// = 1334，探针再加 work-pad 36×2 → 1406；空隙 = 1920 − 300 − 1406 = 214。
+const G1920 = { artNow: 680, slack: 214, workPad: 36, workW: 1620, base: 680 };
+
+test('铺满：正文吃掉空隙，左右留白换成比例留白', () => {
+  // room = 894；fill = 894 + 72 − 2×64.8 = 836.4 → 836
+  assert.equal(fluidArt({ ...G1920, preset: 'fill' }), 836);
+  // 2560 全屏：比 1920 宽得多，正文跟着宽
+  const w = fluidArt({ artNow: 680, slack: 854, workPad: 36, workW: 2260, base: 680, preset: 'fill' });
+  assert.ok(w > 1300, `2560 下正文应 >1300，得 ${w}`);
+});
+
+test('铺满随窗口变：窗口越宽正文越宽，缩回来也跟着缩', () => {
+  const at = (winW) => fluidArt({ artNow: 680, slack: winW - 300 - 1406, workPad: 36, workW: winW - 300, base: 680, preset: 'fill' });
+  assert.ok(at(1800) < at(2200));
+  assert.ok(at(2200) < at(2560));
+});
+
+test('自洽：用算出来的宽度再量一遍，结果不变（不会自激来回跳）', () => {
+  const w1 = fluidArt({ ...G1920, preset: 'fill' });
+  // 正文变成 w1 后版心变宽 (w1 − 680)，同一窗口下空隙同步变小
+  const w2 = fluidArt({ ...G1920, artNow: w1, slack: G1920.slack - (w1 - 680), preset: 'fill' });
+  assert.equal(w2, w1);
+});
+
+test('与侧栏 / 大纲并存按剩余宽度算：大纲拉宽 60，空隙为负，正文让出 60', () => {
+  const w1 = fluidArt({ ...G1920, preset: 'fill' });
+  const after = fluidArt({ ...G1920, artNow: w1, slack: G1920.slack - (w1 - 680) - 60, preset: 'fill' });
+  assert.equal(after, w1 - 60);
+  // 左栏宽 100：工作区变窄，空隙同样变小
+  const rail = fluidArt({ ...G1920, artNow: w1, slack: G1920.slack - (w1 - 680) - 100, workW: 1520, preset: 'fill' });
+  assert.ok(rail < w1 - 90);
+});
+
+test('适中：封顶 900，放不下就照铺满收', () => {
+  const big = { artNow: 680, slack: 854, workPad: 36, workW: 2260, base: 680 };
+  assert.equal(fluidArt({ ...big, preset: 'medium' }), 900);
+  assert.equal(fluidArt({ ...G1920, preset: 'medium' }), 836);
+});
+
+test('窄：交还 CSS 默认（null），即改版前的 680 / 620', () => {
+  assert.equal(fluidArt({ ...G1920, preset: 'narrow' }), null);
+});
+
+test('紧凑档：比例留白比 26px 宽时不比改版前更窄，且绝不超出能放下的宽度', () => {
+  // 1500 窗、笔记本档：左栏 240、正文 620、版心＝16+620+26+300+226 = 1188，探针 +52 → 1240，空隙 20
+  const r = fluidArt({ artNow: 620, slack: 20, workPad: 26, workW: 1260, base: 620, preset: 'fill' });
+  assert.ok(r >= 620, `不应比原版 620 窄，得 ${r}`);
+  assert.ok(r <= 640, `不应超出 room 640，得 ${r}`);
+  // 已经溢出（空隙为负）时上限是 room，正文让出来
+  assert.equal(fluidArt({ artNow: 620, slack: -50, workPad: 26, workW: 1260, base: 620, preset: 'fill' }), 570);
+  // 再挤也不低于 ART_MIN
+  assert.equal(fluidArt({ artNow: 620, slack: -500, workPad: 26, workW: 1260, base: 620, preset: 'fill' }), ART_MIN);
+});
+
+test('量不到几何就返回 null（退回 CSS 默认，不猜）', () => {
+  for (const k of ['artNow', 'slack', 'workPad', 'workW', 'base']) {
+    assert.equal(fluidArt({ ...G1920, [k]: null, preset: 'fill' }), null, k);
+  }
+});
+
+test('单列档封顶：铺满不封，适中 900，窄 680', () => {
+  assert.equal(artCap('fill'), null);
+  assert.equal(artCap('medium'), 900);
+  assert.equal(artCap('narrow'), 680);
+  // CSS 侧：只在 901–1279 读 --art-cap，手机档不碰
+  assert.match(CSS, /@media \(min-width: 901px\) and \(max-width: 1279px\)\s*\{\s*\.work \{ padding-inline: max\(24px, 4%, calc\(\(100% - var\(--art-cap, 100%\)\) \/ 2\)\); \}/);
+  assert.match(CSS, /--art-base:\s*620px/);
+});
+
+test('ui.js 接线：没拖过才跟随；--art-cap 写在 documentElement 上', () => {
+  const UI = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'ui.js'), 'utf8',
+  );
+  assert.match(UI, /artW == null && isColResizable\(winW, ART_MIN_WINDOW\)/);
+  assert.match(UI, /setProperty\('--art-cap'/);
 });
 
 // ── 回归闸门：覆盖值必须写在 :root 上，不能写回 #app 行内 ──

@@ -34,6 +34,7 @@ import {
   ART_MIN, TOC_MIN, ART_MIN_WINDOW, TOC_MIN_WINDOW, ART_KEY, TOC_KEY,
   INDENT_MIN, INDENT_MIN_WINDOW, INDENT_KEY,
   isColResizable, colSlack, clampCol, getColWidth, setColWidth, clearColWidth,
+  getWidthPreset, setWidthPreset, nextWidthPreset, fluidArt, artCap,
 } from './cols.js';
 import { matchAnchor } from './slug.js';
 import { S } from './strings.js';
@@ -1361,12 +1362,20 @@ function App() {
   const [indentW, setIndentW] = useState(() => getColWidth(INDENT_KEY));
   const [railBox, setRailBox] = useState(null);
   const [winW, setWinW] = useState(() => (typeof window === 'undefined' ? 0 : window.innerWidth));
+  // 阅读宽度档（铺满 / 适中 / 窄），见 cols.js「阅读宽度档」。
+  const [widthPreset, setWidthPresetState] = useState(getWidthPreset);
+  // 与 stageBox **同一时刻**从 :root 读的三个 CSS 变量生效值：当前正文宽 / CSS 固定默认宽 /
+  // .work 最小留白。必须和探针一起量——fluidArt 的 room＝当前宽 + 空隙，两个数不同步就会自激。
+  const [cssGeom, setCssGeom] = useState(null);
   const measureGeom = () => {
     setStageBox(probeRef.current ? probeRef.current.offsetWidth : null);
     // 左栏实宽只能量，不能从 railW 推：它没拖过时是 CSS 的响应式默认（300 / 240），
     // 而那个默认值写在 style.css 的媒体查询里，JS 这边复制一份必然失同步。
     const aside = document.querySelector('#app > aside');
     setRailBox(aside ? aside.offsetWidth : null);
+    const cs = getComputedStyle(document.documentElement);
+    const px = (v) => { const n = parseFloat(cs.getPropertyValue(v)); return Number.isFinite(n) ? n : null; };
+    setCssGeom({ artNow: px('--art-w'), base: px('--art-base'), workPad: px('--work-pad') });
   };
   useLayoutEffect(() => {
     const measure = () => { measureGeom(); setWinW(window.innerWidth); };
@@ -1390,10 +1399,22 @@ function App() {
   // ⚠️ 收窄的结果**绝不写回 artW / tocW**：那是他想要的宽度，缩一次窗口就削掉的话，
   // 拉回宽屏也回不来了（railW 立过同一条规矩）。
   const slack = colSlack(winW, railBox, stageBox);
+  // 没拖过正文手柄（artW == null）就按阅读宽度档跟随窗口（2026-11-03）。
+  // 这里要**不截 0 的**空隙：大纲 / 左栏 / 缩进变宽时这一帧会先溢出（空隙为负），
+  // 正文得跟着让出来；colSlack 把负数归 0 的话正文就永远只涨不缩。
+  const rawSlack = slack == null ? null : winW - railBox - stageBox;
+  const artFluid = artW == null && isColResizable(winW, ART_MIN_WINDOW) && rawSlack != null && cssGeom != null
+    ? fluidArt({ preset: widthPreset, artNow: cssGeom.artNow, slack: rawSlack,
+      workPad: cssGeom.workPad, workW: winW - railBox, base: cssGeom.base })
+    : null;
   const appliedArt = (artW != null && isColResizable(winW, ART_MIN_WINDOW) && slack != null)
-    ? clampCol(artW, ART_MIN, artW + slack) : null;
+    ? clampCol(artW, ART_MIN, artW + slack) : artFluid;
   // 正文让出来的宽度归大纲用，否则两栏各按同一份 slack 收，会重复扣一次。
-  const tocSlack = slack == null ? null : slack + (appliedArt == null ? 0 : artW - appliedArt);
+  // 跟随档里正文「想要的」就是它当前的宽（cssGeom.artNow），让出来的是两者之差。
+  const artGive = appliedArt == null ? 0
+    : artW != null ? artW - appliedArt
+    : Math.max(0, cssGeom.artNow - appliedArt);
+  const tocSlack = slack == null ? null : slack + artGive;
   const appliedToc = (tocW != null && isColResizable(winW, TOC_MIN_WINDOW) && tocSlack != null)
     ? clampCol(tocW, TOC_MIN, tocW + tocSlack) : null;
   const appliedIndent = (indentW != null && isColResizable(winW, INDENT_MIN_WINDOW) && slack != null)
@@ -1484,7 +1505,11 @@ function App() {
     // --art-indent 同样在 --main-w 的算式里，理由同上
     if (appliedIndent == null) st.removeProperty('--art-indent');
     else st.setProperty('--art-indent', `${appliedIndent}px`);
-  }, [appliedArt, appliedToc, appliedIndent, margEmpty]);
+    // 单列档（901–1279）正文是 width:100%，档位靠 max-width 封顶；铺满不封。
+    const cap = artCap(widthPreset);
+    if (cap == null) st.removeProperty('--art-cap');
+    else st.setProperty('--art-cap', `${cap}px`);
+  }, [appliedArt, appliedToc, appliedIndent, margEmpty, widthPreset]);
 
   // 版心一变就重量探针（2026-10-11）。原先只在挂载和 resize 时量：拖正文 / 大纲、眉批栏
   // 塌掉、左栏向版心借宽之后 stageBox 都是过时的，appliedRail 会被旧版心夹回去——左栏借到
@@ -1515,6 +1540,10 @@ function App() {
     onStart: () => ({ free: railFreeNow() ?? 0, opts: railLendOpts(geomNow()), art0: artW, toc0: tocW }),
     onWant: (want, ctx) => {
       const lent = railLend(want, ctx.free, ctx.opts);
+      // ⚠️ 正文在跟随档时这里**仍要钉成定值**（2026-11-03 headless rail 用例实测）：
+      // appliedRail 被「当前版心」夹住，而跟随档的正文要等左栏变宽、空隙变负之后才收——
+      // 两边互相等，左栏拖不过空隙。左栏向正文借宽是用户明确挤压正文，钉住说得通；
+      // 双击正文手柄即可回到档位。大纲 / 缩进的生效值不按版心夹，没有这个死锁，那两处不钉。
       setArtW(lent.art ?? ctx.art0);
       setTocW(lent.toc ?? ctx.toc0);
       return lent;
@@ -1580,7 +1609,8 @@ function App() {
     min: TOC_MIN, sign: -1,
     target: () => document.querySelector('.toc'),
     setW: setTocW, persist: (px) => setColWidth(TOC_KEY, px),
-    onStart: (startW) => { const g = geomNow(); return { free: startW + (g.slack ?? 0), art: g.art }; },
+    // 跟随档（artW == null）不向正文「借」成定值：大纲变宽后正文按剩余宽度自己收。
+    onStart: (startW) => { const g = geomNow(); return { free: startW + (g.slack ?? 0), art: artW == null ? null : g.art }; },
     onWant: (want, ctx) => {
       if (ctx.art == null) return null;
       const over = Math.max(0, want - ctx.free);
@@ -1615,7 +1645,8 @@ function App() {
       return { getBoundingClientRect: () => ({ width: w }) };
     },
     setW: setIndentW, persist: (px) => setColWidth(INDENT_KEY, px),
-    onStart: (startW) => { const g = geomNow(); return { free: startW + (g.slack ?? 0), art: g.art }; },
+    // 理由同大纲手柄：跟随档里缩进变大，正文自己按剩余宽度收，不写死 artW。
+    onStart: (startW) => { const g = geomNow(); return { free: startW + (g.slack ?? 0), art: artW == null ? null : g.art }; },
     onWant: (want, ctx) => {
       if (ctx.art == null) return null;
       const over = Math.max(0, want - ctx.free);
@@ -1661,7 +1692,10 @@ function App() {
           carrying=${carrying}
           nextUp=${nextUp} onNextUp=${() => { setTab('open'); openPR(nextUp); }}
           onNoticeClose=${() => setNotice('')}
-          readStep=${readStep} moreOpen=${moreOpen} onMore=${() => setMoreOpen((o) => !o)}
+          readStep=${readStep}
+          widthPreset=${widthPreset}
+          onWidthPreset=${() => { const p = nextWidthPreset(widthPreset); setWidthPresetState(p); setWidthPreset(p); }}
+          moreOpen=${moreOpen} onMore=${() => setMoreOpen((o) => !o)}
           updating=${updating}
           onUpdate=${() => { setUpdating(true); say(S.stale.updating); hardUpdate([...BUILD_FILES, ...VENDOR_FILES]); }}
           onReadStep=${(i) => { const c = clampStep(i); setReadStepState(c); setReadStep(c); }}

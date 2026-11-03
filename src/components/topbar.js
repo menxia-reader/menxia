@@ -7,7 +7,7 @@ import { READ_STEPS, percentOf } from '../readsize.js';
 
 export function Topbar({
   cur, archived, onHead, busy, draftCount, verifyN = 0, happyUrl, stale, notice, carrying,
-  readStep = 1, onReadStep, moreOpen = false, onMore, onUpdate, updating = false,
+  readStep = 1, onReadStep, widthPreset = 'fill', onWidthPreset, moreOpen = false, onMore, onUpdate, updating = false,
   onRefresh, onCopyRef, onCarry, onZongpi, onSubmit, onQinci,
   nextUp, onNextUp, onNoticeClose,
 }) {
@@ -38,6 +38,12 @@ export function Topbar({
                   title=${S.readSize.smallerTitle(pct)} onClick=${() => onReadStep(readStep - 1)}>${S.readSize.smaller}</button>
                 <button class="read-size-btn" disabled=${readStep >= READ_STEPS.length - 1}
                   title=${S.readSize.largerTitle(pct)} onClick=${() => onReadStep(readStep + 1)}>${S.readSize.larger}</button>
+              </span>`}
+            ${/* 阅读宽度档：点一下轮换 铺满 → 适中 → 窄。手机档（≤900）由 CSS 隐藏——那一档正文本来就铺满。 */ ''}
+            ${cur && onWidthPreset && html`
+              <span class="read-size read-width">
+                <button class="read-size-btn" title=${S.readWidth.title(widthPreset)}
+                  onClick=${onWidthPreset}>${S.readWidth.label(widthPreset)}</button>
               </span>`}
             ${cur && draftCount > 0 && html`
               <button class="btn-primary btn-submit" disabled=${busy || !onHead}
