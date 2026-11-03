@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   validRightLines, parseCommentBody, threadComments, fmtDraft, loadDrafts, saveDrafts, pendingCountFor,
-  reanchorByQuote, scrollClosesFloat, FLOAT_SCROLL_GRACE,
+  reanchorByQuote, scrollClosesFloat, FLOAT_SCROLL_GRACE, blockTextIndex, headingIndex, sectionOf,
 } from '../src/anchor.js';
 
 // ── 浮批钮遇滚动（2026-11-03：程序滚动晚到把刚出现的「批」收掉）──
@@ -211,4 +211,39 @@ test('reanchorByQuote：找不到/引文过短/无 doc 一律返回 null，交�
   assert.equal(reanchorByQuote(doc, 'ab'), null, '太短易误命中，不如不认');
   assert.equal(reanchorByQuote(null, '某段内容'), null);
   assert.equal(reanchorByQuote(doc, ''), null);
+});
+
+// ── 2026-11 质量巡检：快照函数（每篇建一次，渲染时复用）──
+test('blockTextIndex：跳过无行号块、压缩空白、保持 DOM 序', () => {
+  const doc = fakeDoc([{ line: 2, text: 'a\n  b' }, { line: '', text: '无行号' }, { line: 7, text: 'c' }]);
+  assert.deepEqual(blockTextIndex(doc), [{ line: 2, text: 'a b' }, { line: 7, text: 'c' }]);
+  assert.deepEqual(blockTextIndex(null), []);
+});
+
+test('reanchorByQuote：同长度并列命中取 DOM 序第一个（快照路径与旧语义一致）', () => {
+  const doc = fakeDoc([{ line: 3, text: '重复的句子' }, { line: 8, text: '重复的句子' }]);
+  assert.equal(reanchorByQuote(doc, '重复的句子'), 3);
+  assert.equal(reanchorByQuote(doc, '重复的句子', blockTextIndex(doc)), 3);
+});
+
+// sectionOf 此前只有浏览器层（dom.test.html）覆盖；这里补 node 层，钉住边界语义。
+const headDoc = (hs) => ({
+  querySelectorAll: () => hs.map(([line, text]) => ({ dataset: { line: String(line) }, textContent: text })),
+});
+
+test('headingIndex / sectionOf：取 line ≤ 目标行的最后一个标题；在首个标题之前为空串', () => {
+  const doc = headDoc([[1, '总纲'], [5, ' 第一节 '], [20, '第二节']]);
+  const heads = headingIndex(doc);
+  assert.deepEqual(heads, [{ line: 1, text: '总纲' }, { line: 5, text: ' 第一节 ' }, { line: 20, text: '第二节' }]);
+  assert.equal(sectionOf(doc, 5), ' 第一节 ', '恰在标题行上算本节；不 trim（旧语义）');
+  assert.equal(sectionOf(doc, 19), ' 第一节 ');
+  assert.equal(sectionOf(doc, 999), '第二节');
+  assert.equal(sectionOf(headDoc([[4, 'x']]), 3), '');
+  for (const line of [0, 1, 4, 5, 19, 20, 999]) assert.equal(sectionOf(null, line, heads), sectionOf(doc, line), `line ${line}`);
+});
+
+test('sectionOf：空文字标题照旧覆盖前一个（与 extractOutline 跳空标题不同，刻意保留）', () => {
+  const doc = headDoc([[1, '总纲'], [5, '']]);
+  assert.equal(sectionOf(doc, 9), '');
+  assert.deepEqual(headingIndex(null), []);
 });
