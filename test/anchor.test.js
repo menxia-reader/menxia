@@ -4,8 +4,23 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   validRightLines, parseCommentBody, threadComments, fmtDraft, loadDrafts, saveDrafts, pendingCountFor,
-  reanchorByQuote,
+  reanchorByQuote, scrollClosesFloat, FLOAT_SCROLL_GRACE,
 } from '../src/anchor.js';
+
+// ── 浮批钮遇滚动（2026-11-03：程序滚动晚到把刚出现的「批」收掉）──
+test('scrollClosesFloat: 浮钮刚出现时晚到的程序滚动不收（CI 实测晚 ~500ms）', () => {
+  assert.equal(scrollClosesFloat(1000, 1000), false);
+  assert.equal(scrollClosesFloat(1000, 1510), false);
+  assert.equal(scrollClosesFloat(1000, 1000 + FLOAT_SCROLL_GRACE - 1), false);
+});
+test('scrollClosesFloat: 过了宽限期的滚动＝人在滚，照旧收', () => {
+  assert.equal(scrollClosesFloat(1000, 1000 + FLOAT_SCROLL_GRACE), true);
+  assert.equal(scrollClosesFloat(1000, 5000), true);
+});
+test('scrollClosesFloat: 没有出现时刻（NaN / undefined）一律收，往旧行为倒', () => {
+  assert.equal(scrollClosesFloat(NaN, 1000), true);
+  assert.equal(scrollClosesFloat(undefined, 1000), true);
+});
 
 // ── validRightLines：提交前的 hunk 校验。错一行 → 整批 review 422 全灭 ──
 test('validRightLines: 新增文件全行可批', () => {
