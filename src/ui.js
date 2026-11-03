@@ -1540,14 +1540,16 @@ function App() {
     onStart: () => ({ free: railFreeNow() ?? 0, opts: railLendOpts(geomNow()), art0: artW, toc0: tocW }),
     onWant: (want, ctx) => {
       const lent = railLend(want, ctx.free, ctx.opts);
-      // 正文在跟随档（art0 == null）时不钉死：左栏变宽→空隙变小→正文自己跟着收，
-      // 写进 artW 就等于替他「拖过」了，以后窗口再拉宽正文也不涨了。
-      if (ctx.art0 != null) setArtW(lent.art ?? ctx.art0);
+      // ⚠️ 正文在跟随档时这里**仍要钉成定值**（2026-11-03 headless rail 用例实测）：
+      // appliedRail 被「当前版心」夹住，而跟随档的正文要等左栏变宽、空隙变负之后才收——
+      // 两边互相等，左栏拖不过空隙。左栏向正文借宽是用户明确挤压正文，钉住说得通；
+      // 双击正文手柄即可回到档位。大纲 / 缩进的生效值不按版心夹，没有这个死锁，那两处不钉。
+      setArtW(lent.art ?? ctx.art0);
       setTocW(lent.toc ?? ctx.toc0);
       return lent;
     },
     persistNeighbor: (lent) => {
-      if (lent.art != null && artW != null) setColWidth(ART_KEY, lent.art);
+      if (lent.art != null) setColWidth(ART_KEY, lent.art);
       if (lent.toc != null) setColWidth(TOC_KEY, lent.toc);
     },
   });
