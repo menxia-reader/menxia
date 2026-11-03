@@ -28,12 +28,17 @@ export function homeTabOf(pr) {
 
 // 当前栏之外的命中：给「这栏没有，别的栏有」用。`here` = 当前栏已列出的折（不重复报）。
 // 按 open → merged 序，去重，每条标明所在栏。
+// 纯数字查询且当前栏已有命中时，别栏只报折号精确命中（review M4）：否则搜 `1` / `2026`
+// 会把别栏所有标题含这串数的折都追加上来，淹没真正的折号命中。
 export function hitsElsewhere(prs, donePrs, query, here = []) {
   if (!(query || '').trim()) return [];
+  const n = prNumberOf(query);
+  const exactOnly = n != null && here.length > 0;
   const seen = new Set(here.map((p) => p.number));
   const out = [];
   for (const pr of [...(prs || []), ...(donePrs || [])]) {
-    if (seen.has(pr.number) || !matchesQuery(pr, query)) continue;
+    if (seen.has(pr.number)) continue;
+    if (exactOnly ? pr.number !== n : !matchesQuery(pr, query)) continue;
     seen.add(pr.number);
     out.push({ pr, tab: homeTabOf(pr) });
   }
@@ -127,10 +132,12 @@ export function snippetAround(text, idx, qlen, width = 60) {
 
 // 汇总：折号命中 + 标题命中 + 正文命中，按折分组返回；折号命中的那折排最前。
 // 折号查询（`7` / `#7`）不受「至少两个字」限制——一位数折号也是精确的。
+// 但放行的只是折号匹配：标题/正文仍受两字下限（review M5），否则回车搜 `7` 会命中几乎每折正文。
 export function searchIndex(index, query) {
   const q = query.trim();
   const num = prNumberOf(q);
-  if (q.length < 2 && num == null) return [];
+  const textOk = q.length >= 2;
+  if (!textOk && num == null) return [];
   const groups = [];
   let numGroup = null;
   for (const { pr, files } of index) {
@@ -138,6 +145,7 @@ export function searchIndex(index, query) {
     if (num != null && pr.number === num) {
       hits.push({ kind: 'number', path: null, line: null, snippet: `#${pr.number} ${pr.title}` });
     }
+    if (!textOk) { if (hits.length) numGroup = { pr, hits }; continue; }
     if (pr.title.toLowerCase().includes(q.toLowerCase())) {
       hits.push({ kind: 'title', path: null, line: null, snippet: pr.title });
     }

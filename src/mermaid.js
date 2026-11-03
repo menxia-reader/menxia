@@ -17,8 +17,12 @@ export function findMermaidBlocks(container) {
   return out;
 }
 
-// 纯函数：造 figure，把 pre 的行号锚原样搬过来（锚定行号不变）
-export function figureFor(pre, blobUrl, alt) {
+// 纯函数：造 figure，把 pre 的行号锚原样搬过来（锚定行号不变）。
+// 图源码原样留在 figure 里（折叠的 <details>，review M1）：figure 只放 <img> 时 textContent 为空，
+// 草稿高亮（rangeForDraft）、过期评论按引文重锚（reanchorByQuote）都在块文本里找引文，会全部落空，
+// 源码也不能再划选批注。内层 <code> 不带 language-mermaid、不带 data-line——
+// 否则下一轮 findMermaidBlocks 会把它当新围栏再渲一遍，[data-line] 查找也会撞出两个同号块。
+export function figureFor(pre, blobUrl, alt, src = '', srcLabel = '') {
   const doc = pre.ownerDocument;
   const fig = doc.createElement('figure');
   fig.className = 'mermaid-fig';
@@ -31,8 +35,33 @@ export function figureFor(pre, blobUrl, alt) {
   img.src = blobUrl;
   img.alt = alt;
   fig.appendChild(img);
+  if (src) {
+    const det = doc.createElement('details');
+    det.className = 'mermaid-src';
+    const sum = doc.createElement('summary');
+    sum.textContent = srcLabel;
+    const p = doc.createElement('pre');
+    const code = doc.createElement('code');
+    code.textContent = src;
+    p.appendChild(code);
+    det.appendChild(sum);
+    det.appendChild(p);
+    fig.appendChild(det);
+  }
   return fig;
 }
+
+// blob URL 不能在 <img> load 后就 revoke：展图浮窗（image-view.js）要拿同一个 src 再开一张大图。
+// 改为登记，下次 hydrate（= 换了文档）时把已离开 DOM 的 figure 的 URL 收掉（review M8）。
+const liveBlobs = new Set();   // { url, fig }
+export function sweepBlobUrls() {
+  for (const b of liveBlobs) {
+    if (b.fig.isConnected) continue;
+    try { URL.revokeObjectURL(b.url); } catch { /* 已失效 */ }
+    liveBlobs.delete(b);
+  }
+}
+export const liveBlobCount = () => liveBlobs.size;
 
 // 诊断用（冒烟 mm 层读它，定位"沙箱没应答"是没加载、没发出还是没回）
 export const mermaidState = { loaded: null, sent: 0, replied: 0, errors: 0 };
@@ -100,26 +129,35 @@ function markFailed(pre, msg) {
 
 // 无围栏时不创建 iframe、不加载 mermaid
 // timeoutMs 只给无头冒烟放宽：virtual-time 下跨进程 iframe 的真实渲染耗时不推进虚拟时钟，3s 会先到
+// 返回实际换成 figure 的块数（ui.js 据此决定渲完要不要把深链目标重新对齐）
 export async function hydrateMermaid(container, { theme, timeoutMs = MERMAID_TIMEOUT_MS } = {}) {
+  sweepBlobUrls();
   const blocks = findMermaidBlocks(container);
-  if (!blocks.length) return;
+  if (!blocks.length) return 0;
   const f = ensureFrame();
   const ok = await f.ready;
-  if (!ok) { blocks.forEach((b) => markFailed(b.pre, 'sandbox')); return; }
+  if (!ok) { blocks.forEach((b) => markFailed(b.pre, 'sandbox')); return 0; }
   const th = theme || currentTheme();
+  let replaced = 0;
   for (const b of blocks) {
+    // 先查再发（review M6）：换文档后旧文档剩下的块若照发，会在共用的单个沙箱里排队，
+    // 新文档的图跟着等、可能超时报假的「渲染失败」。
+    if (!b.pre.isConnected) continue;
     const r = await renderInSandbox(f, b.src, th, timeoutMs);
     if (!b.pre.isConnected) continue;   // 渲染期间换了文档
     if (r.svg) {
       const url = URL.createObjectURL(new Blob([r.svg], { type: 'image/svg+xml' }));
-      const fig = figureFor(b.pre, url, S.doc.mermaidAlt);
+      const fig = figureFor(b.pre, url, S.doc.mermaidAlt, b.src, S.doc.mermaidSource);
+      liveBlobs.add({ url, fig });
       // mermaid 的 svg 根上是 width="100%"，当 <img> 用会被拉满栏宽放大；按 viewBox 的固有宽度定尺寸，
       // 太宽时由 article img 的 max-width:100% 兜住（走 CSSOM，主页 CSP 不许内联 style 属性）
       const vb = /viewBox="[-\d.]+[ ,]+[-\d.]+[ ,]+([\d.]+)[ ,]+[\d.]+"/.exec(r.svg);
       if (vb) fig.querySelector('img').style.width = `${Math.round(parseFloat(vb[1]))}px`;
       b.pre.replaceWith(fig);
+      replaced++;
     } else {
       markFailed(b.pre, r.error || 'error');
     }
   }
+  return replaced;
 }

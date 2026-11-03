@@ -312,6 +312,7 @@ export const S = deepFreeze({
     relLinkMissing: (path) => `这折里没有 ${path}`,
     imageMissing: (path) => `图取不到：${path}`,
     mermaidAlt: 'mermaid 图',
+    mermaidSource: '图源码',
     mermaidFailed: (msg) => `mermaid 渲染失败，显示源码：${msg}`,
   },
 
