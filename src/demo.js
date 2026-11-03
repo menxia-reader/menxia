@@ -610,6 +610,14 @@ export async function autoAnnotate(docEl) {
 
 async function runSmoke(docEl) {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // TMPDIAG
+  const t0 = performance.now();
+  const T = () => Math.round(performance.now() - t0);
+  console.log(`[smoke] TMPDIAG start art=${getComputedStyle(document.documentElement).getPropertyValue('--art-w')} inline=${document.documentElement.style.getPropertyValue('--art-w')} w=${innerWidth}`);
+  new MutationObserver(() => console.log(`[smoke] TMPDIAG t=${T()} rootstyle=${document.documentElement.getAttribute('style')}`))
+    .observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+  document.addEventListener('scroll', (e) => console.log(`[smoke] TMPDIAG t=${T()} scroll ${e.target.className || e.target.nodeName} top=${e.target.scrollTop}`), true);
+  window.addEventListener('resize', () => console.log(`[smoke] TMPDIAG t=${T()} resize w=${innerWidth}`));
   const rangeFor = (text) => {
     const block = [...docEl.querySelectorAll('[data-line]')].find((b) => b.textContent.includes(text));
     if (!block) return null;
@@ -652,6 +660,7 @@ async function runSmoke(docEl) {
     // 浮钮出现**之后**，ui.js 的捕获期 onScroll 当场 setFloat(null)，浮钮再也不回来。
     // 所以开划之前先让上一轮的滚动落地。
     await settle();
+    console.log(`[smoke] TMPDIAG t=${T()} pick-begin ${text.slice(0, 8)}`);
     const r = rangeFor(text);
     // 三处「等不到」以前全是静默 return/跳过，失败现场离报错点隔着好几条断言。
     // 现在各自出一句诊断——**不带 PASS/FAIL 前缀**，所以不进 smoke 的 golden 名单，
@@ -675,6 +684,7 @@ async function runSmoke(docEl) {
         + ` active=${ae?.tagName}.${ae?.className || ''} workTop=${document.querySelector('.work')?.scrollTop}`);
       return;
     }
+    console.log(`[smoke] TMPDIAG t=${T()} float-ok ${text.slice(0, 8)}`);
     float.click();
     await sleep(120);
     const ta = document.querySelector('.anno-input')
