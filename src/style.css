@@ -32,7 +32,11 @@
      的 max-width，块就跟正文错位，而且不报错。改这里之前先读 --stage 的算式。 */
   --rail-w: 300px;      /* 左栏：折清单 */
   --art-indent: 26px;   /* 正文列左缩进；正文之上的块（tab 条/判/折首/语言钮）全部对齐它 */
-  --art-w: 680px;       /* 正文列：16.5px 下 ≈41 字/行 */
+  /* 正文列的 CSS 固定默认（16.5px 下 ≈41 字/行）。2026-11-03 起正文默认跟随窗口：
+     ui.js 按「阅读宽度」档现算 --art-w 写到 :root 上覆盖它；「窄」档与 JS 没跑时就是这个值。
+     单独提成 --art-base 是因为 --art-w 被覆盖后 JS 仍要读到 CSS 默认（fluidArt 的下限）。 */
+  --art-base: 680px;
+  --art-w: var(--art-base);
   --col-gap: 34px;      /* 正文｜眉批｜大纲 三栏间距；批注卡的引线长度也取它 */
   --marg-w: 300px;      /* 眉批栏 */
   --toc-w: 260px;       /* 大纲栏（2026-08-03 由 208 加宽：标题老被截断） */
@@ -76,7 +80,7 @@
      否则 1660–1709 会横向溢出。 */
 @media (min-width: 1280px) and (max-width: 1709px) {
   :root {
-    --rail-w: 240px; --art-indent: 16px; --art-w: 620px;
+    --rail-w: 240px; --art-indent: 16px; --art-base: 620px;
     --col-gap: 26px; --toc-w: 200px; --work-pad: 26px;
   }
 }
@@ -1343,3 +1347,16 @@ button.rel-chip:hover { border-color: var(--ink-soft); color: var(--ink); }
 .rel-unlocked  { border-color: #3B7BB5; color: #2A5B87; }   /* 依赖已画可 */
 
 .list-tab.dash-btn { margin-left: auto; }
+
+/* ── 阅读宽度档（2026-11-03）──
+   ≥1280：ui.js 按档现算 --art-w 写到 :root（见 cols.js「阅读宽度档」），这里不用管。
+   901–1279 单列档：正文本来就是 width:100%，但 .work 的居中式按 --stage（＝正文 680）留白，
+   宽一点的窗口里正文仍是中间一条。这一档改成比例留白 max(24px, 4%)，再按档位封顶：
+   铺满不封（--art-cap 未设，回退 100% → 第三项为 0）；适中 900 / 窄 680 由 ui.js 写 --art-cap。
+   .work 的包含块是 main（工作区），所以 4% 与 100% 都按工作区宽算。
+   ≤900 手机档不在这条范围内，原样不动。写在文件末尾：与 311 行那条同特异度，后写的赢。 */
+@media (min-width: 901px) and (max-width: 1279px) {
+  .work { padding-inline: max(24px, 4%, calc((100% - var(--art-cap, 100%)) / 2)); }
+}
+/* 手机档正文本来铺满，宽度档没有意义，按钮不出现 */
+@media (max-width: 900px) { .read-width { display: none; } }

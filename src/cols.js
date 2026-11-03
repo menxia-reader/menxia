@@ -113,3 +113,77 @@ export const setColWidth = (key, px) => {
 export const clearColWidth = (key) => {
   try { localStorage.removeItem(key); } catch { /* 同上 */ }
 };
+
+// ── 阅读宽度档（2026-11-03 Charlie：「就算全屏，中间阅读的 text 也只有中间竖着的一条」）──
+//
+// 正文列**默认跟随窗口**：没拖过手柄时按档位现算宽度，窗口一变就重算。
+//   · fill   铺满（默认）——版心吃满 .work，左右只留 max(24, 4% 工作区宽) 的比例留白
+//   · medium 适中——同上，但正文封顶 MEDIUM_W
+//   · narrow 窄——原口径：交还 CSS 的固定默认（:root 680 / 笔记本档 620），即改版前的样子
+// 拖过手柄（ART_KEY 有存量值）就按拖的宽度，档位不管；双击手柄归位后回到档位。
+//
+// 算法沿用本文件头的口径：不在 JS 里复制 CSS 的栏宽算术，全部从实测量出来。
+//   room = 正文当前宽 + 空隙          ← 按 CSS 原留白（--work-pad）还能放多宽
+//   fill = room + 2·workPad − 2·pad   ← 把留白从 --work-pad 换成比例留白 pad
+// 当前宽与空隙在同一时刻量（空隙算式里就含当前 --art-w），所以 room 与当前正文宽无关：
+// 下一帧正文变宽、空隙同步变小，room 不变，算出来的值就稳住了——不会自激。
+// 左栏 / 大纲 / 眉批栏 / 章栏 / 缩进都在空隙里扣过，所以「与侧栏并存时按剩余宽度算」是自动的。
+
+export const WIDTH_PRESETS = ['fill', 'medium', 'narrow'];
+export const DEFAULT_WIDTH_PRESET = 'fill';
+export const WIDTH_KEY = 'zhupi.readWidth';
+export const MEDIUM_W = 900;
+export const NARROW_W = ART_DEFAULT;   // 窄档＝原 680 口径（笔记本档仍是 CSS 的 620）
+export const FLUID_PAD_MIN = 24;
+export const FLUID_PAD_RATIO = 0.04;
+
+export const normWidthPreset = (p) => (WIDTH_PRESETS.includes(p) ? p : DEFAULT_WIDTH_PRESET);
+
+/** 顶栏按钮轮换：铺满 → 适中 → 窄 → 铺满。 */
+export const nextWidthPreset = (p) =>
+  WIDTH_PRESETS[(WIDTH_PRESETS.indexOf(normWidthPreset(p)) + 1) % WIDTH_PRESETS.length];
+
+export const getWidthPreset = () => {
+  try { return normWidthPreset(localStorage.getItem(WIDTH_KEY)); } catch { return DEFAULT_WIDTH_PRESET; }
+};
+
+export const setWidthPreset = (p) => {
+  try { localStorage.setItem(WIDTH_KEY, normWidthPreset(p)); } catch { /* 存不下就只在本次会话生效 */ }
+};
+
+/** 比例留白（每侧）：max(24, 工作区宽 × 4%)。 */
+export const fluidPad = (workW) => Math.max(FLUID_PAD_MIN, workW * FLUID_PAD_RATIO);
+
+/**
+ * 没拖过手柄时正文列该多宽。返回 null＝交还 CSS 默认（窄档，或量不到几何）。
+ *
+ * @param preset   'fill' | 'medium' | 'narrow'
+ * @param artNow   正文列当前宽（:root 上 --art-w 的生效值）
+ * @param slack    同一时刻量的空隙（colSlack），允许为 0
+ * @param workPad  CSS 的 --work-pad（.work 的最小左右留白）
+ * @param workW    工作区宽＝窗宽 − 左栏实宽
+ * @param base     CSS 的固定默认正文宽（--art-base：680 / 笔记本档 620）
+ *
+ * 下限 min(base, room)：比例留白在紧凑档（1280–1709）会比原来的 26px 宽，铺满反而比原版窄
+ * ——那就保留原版宽度，绝不比改版前更窄。上限 room：永远不超出按原留白能放下的宽度，
+ * 不会横向溢出。最后兜 ART_MIN，与拖动的下限同一口径。
+ */
+export const fluidArt = ({ preset, artNow, slack, workPad, workW, base }) => {
+  const p = normWidthPreset(preset);
+  if (p === 'narrow') return null;
+  if (![artNow, slack, workPad, workW, base].every(Number.isFinite)) return null;
+  const room = artNow + slack;
+  const fill = room + 2 * workPad - 2 * fluidPad(workW);
+  const target = p === 'medium' ? Math.min(MEDIUM_W, fill) : fill;
+  const floor = Math.min(base, room);
+  return Math.round(Math.max(ART_MIN, Math.min(room, Math.max(target, floor))));
+};
+
+/**
+ * 单列档（901–1279：正文 width:100%）里的封顶。铺满不封（null），适中 / 窄各封各的。
+ * 手机档（≤900）不读这个变量——style.css 只在 901–1279 用它。
+ */
+export const artCap = (preset) => {
+  const p = normWidthPreset(preset);
+  return p === 'medium' ? MEDIUM_W : p === 'narrow' ? NARROW_W : null;
+};
