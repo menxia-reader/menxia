@@ -733,8 +733,12 @@ function App() {
   const submitRef = useRef();
   useEffect(() => {
     // 当前选区 → 浮钮，鼠标与触屏两条路径共用的唯一落点
-    const showFloat = () => {
+    // floatAt：本颗浮钮出现的时刻，给 onScroll 判「程序滚动余波 / 人在滚」（见 anchor.js
+    // scrollClosesFloat）。重定位不刷新它，否则连续滚动会把宽限期无限续下去、浮钮永远不收。
+    let floatAt = NaN;
+    const showFloat = (reposition = false) => {
       const a = A.computeAnchor(docRef.current);
+      if (!reposition) floatAt = a ? performance.now() : NaN;
       setFloat(a ? { ...a, rect: { left: a.rect.right, top: a.rect.bottom } } : null);
     };
     const onMouseUp = (e) => {
@@ -743,7 +747,7 @@ function App() {
       if (e.target.closest('.zhupi-float, .anno-card, .zongpi-card, .thread-view')) return;
       if (e.target.closest('aside, .mainbar')) { if (R.current.float) setFloat(null); return; } // 点按钮也要收浮钮
       if (!R.current.canAnnotate) { if (R.current.float) setFloat(null); return; } // 旧版/归档只读：不出浮批钮
-      setTimeout(showFloat, 0);
+      setTimeout(() => showFloat(), 0);
     };
     // 触屏路径：iOS Safari 把长按选字与拖选择手柄整段手势交给原生选择 UI，不派发合成的
     // mouse 事件——只挂 mouseup 的话 iPad 上手指选中后浮钮永远不出（接妙控走 mousedown 则正常）。
@@ -775,7 +779,12 @@ function App() {
       if (!editing && drafts.length && !busy) submitRef.current?.();
     };
     const onScroll = () => {
-      if (R.current.float) setFloat(null); // 内滚不派发 mousedown，浮钮会残留
+      if (R.current.float) {
+        // 内滚不派发 mousedown，浮钮会残留——人滚就收。刚出现的那一小段里的滚动是上一个动作
+        // （编辑器 focus / 跳转定位）晚到的余波，收掉就成了「批」一闪即逝：改为跟着选区重定位。
+        if (A.scrollClosesFloat(floatAt, performance.now())) setFloat(null);
+        else showFloat(true);
+      }
       recordReadState();                   // M2：滚动到哪、续读位置记到哪（内部节流，best-effort）
     };
     document.addEventListener('mouseup', onMouseUp);

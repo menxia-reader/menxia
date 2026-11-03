@@ -641,14 +641,21 @@ async function runSmoke(docEl) {
       await sleep(25);
     }
   };
-  // 等两帧：scroll 事件是在下一帧才派发的，等它落地再往下走。
-  // 2026-11-03 兜底由 150ms 放到 1000ms（main CI 两次红，#27 正文跟随窗口后 1440 下正文 620→762，
-  // Linux 字体下第一轮 pick 的编辑器 focus 要把 .work 滚到 885）：headless 的帧很稀疏，CI 实测
-  // 编辑器 focus 引起的 scroll 事件晚到 ~500ms（t=17390 点浮钮 → t=17900 才派发），150ms 的
-  // 兜底先赢，settle 在**那一帧之前**就返回了，滚动落在下一轮浮钮出现之后 → 浮钮被收、草稿少一条。
-  // 兜底只防 rAF 永远不来（页面被挂起）卡死；正常情况两帧一到就返回，不会多等。
-  const settle = () => Promise.race([
-    new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))), sleep(1000)]);
+  // 等 .work 滚动静止：连续 2 帧 scrollTop 不变才往下走，总上限 1500ms。
+  // scroll 事件在下一帧才派发；2026-11-03 前是「两帧 或 150ms 先到者」，headless 帧稀疏时 150ms
+  // 先赢，上一轮编辑器 focus 引起的滚动（CI 实测晚 ~500ms：t=17390 点浮钮 → t=17900 派发）落在
+  // 下一轮浮钮出现之后，把它收掉（应用层已加宽限，见 anchor.js scrollClosesFloat；这里让节拍本身也稳）。
+  // 每帧兜底 500ms：防 rAF 永远不来（页面被挂起）时卡满上限。
+  const settle = async () => {
+    const w = document.querySelector('.work');
+    const deadline = performance.now() + 1500;
+    let last = w?.scrollTop, still = 0;
+    while (still < 2 && performance.now() < deadline) {
+      await Promise.race([new Promise((r) => requestAnimationFrame(r)), sleep(500)]);
+      const now = w?.scrollTop;
+      if (now === last) still++; else { still = 0; last = now; }
+    }
+  };
   const pick = async (text, note, save) => {
     // 2026-10-15 加（CI 10/12、10/14 两次红，日志都是「pick 等不到浮批钮：const DEBOUNCE_M」，
     // 下游 3～6 条断言连坐）：上一轮 pick 打开的编辑器是在 useEffect + setTimeout(0) 里才
@@ -723,6 +730,34 @@ async function runSmoke(docEl) {
     getSelection().addRange(tRange); // 模拟按住拖选：选区在变，但还没 mouseup
     await sleep(450);
     chk('mouse-drag-holds-float-until-mouseup', !document.querySelector('.zhupi-float'));
+    getSelection().removeAllRanges();
+    await sleep(50);
+  }
+
+  // 浮钮遇滚动（2026-11-03，main CI 两次红的真因）：上一个动作（编辑器 focus / 跳转定位）引起的
+  // 程序滚动，scroll 事件晚到、落在新浮钮出现之后，曾把它当场收掉——真人连划两段时「批」一闪即逝。
+  // 两侧各钉一条：刚出现时来的滚动不收；过了宽限期（anchor.js FLOAT_SCROLL_GRACE）再滚照旧收。
+  // 用同步 dispatchEvent 而不是改 scrollTop：真滚动的事件要等下一帧，headless 帧稀疏时晚多少
+  // 不可控，这里要钉的是 onScroll 的判定本身，不该再引入一个时序变量。
+  {
+    const fr = rangeFor('迁移到 Preact 之后');
+    const w = document.querySelector('.work');
+    let shown = false;
+    if (fr && w) {
+      getSelection().removeAllRanges(); getSelection().addRange(fr);
+      docEl.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+      shown = Boolean(await waitFor(() => document.querySelector('.zhupi-float')));
+      w.dispatchEvent(new Event('scroll'));
+      await sleep(50);
+    }
+    chk('float-survives-late-programmatic-scroll', shown && Boolean(document.querySelector('.zhupi-float')),
+      `range=${Boolean(fr)} shown=${shown}`);
+    if (shown) {
+      await sleep(700);
+      w.dispatchEvent(new Event('scroll'));
+      await sleep(50);
+    }
+    chk('float-closes-on-user-scroll', shown && !document.querySelector('.zhupi-float'), `shown=${shown}`);
     getSelection().removeAllRanges();
     await sleep(50);
   }

@@ -1,6 +1,17 @@
 // 锚定与草稿的纯逻辑层（无 UI、无框架）——迁移时原样搬运的资产
 // 锚定策略见 SPEC §9.1：主锚 = DOM 行号，引文永远进批注正文兜底。
 
+// ── 浮批钮遇滚动：收起还是跟着选区重定位 ──
+// 2026-11-03（main CI 两次红 + 真人连划两段时第二个「批」一闪就没）：上一轮编辑器 focus /
+// 跳转定位引起的**程序滚动**，其 scroll 事件要等下一帧才派发，headless 实测可晚 ~500ms，
+// 落在新浮钮出现之后就把它收掉了。scroll 事件本身分不出是谁滚的，所以按时间判：
+// 浮钮出现后 FLOAT_SCROLL_GRACE 内的滚动当作「上一个动作的余波」——不收，按当前选区重定位；
+// 过了这段再滚才是人在滚，照旧收（内滚不派发 mousedown，不收浮钮会残留在原位）。
+export const FLOAT_SCROLL_GRACE = 600;
+/** 浮钮在 shownAt 出现，now 时来了一次滚动：true＝收起，false＝留着（重定位）。 */
+export const scrollClosesFloat = (shownAt, now, grace = FLOAT_SCROLL_GRACE) =>
+  !Number.isFinite(shownAt) || now - shownAt >= grace;
+
 // ── 选区 → 锚 ──
 export function closestLine(node) {
   const el = node.nodeType === 1 ? node : node.parentElement;

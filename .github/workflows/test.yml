@@ -11,14 +11,22 @@ jobs:
     name: 单元（纯逻辑）
     runs-on: ubuntu-latest
     steps:
+      # prepush.test.js 要读历史提交（lastCodeCommit~1、写死的 952eedb/ff5837c、HEAD~1），
+      # 默认的 fetch-depth: 1 浅克隆下这 3 条必红（2026-11-03 查实）
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       # 无 npm install：项目零依赖，测试用 Node 内置 runner
       # glob 落空时 node 会「0 个测试、exit 0」静默放行 —— 先钉死文件存在
       - run: ls test/*.test.js
+      # 必须显式 shell: bash —— 缺省 shell 是 `bash -e {0}`，**不带 pipefail**，`| tee` 会把
+      # node --test 的非零退出吞掉（2026-11-03 查实：fail 3 照样绿了不知多久）。
+      # 显式写 bash 时 Actions 用 `bash --noprofile --norc -eo pipefail {0}`。
       - run: node --test test/*.test.js 2>&1 | tee /tmp/unit.log
+        shell: bash
       - name: 断言真的跑了测试（防 glob 落空静默绿）
         run: grep -qE '[[:space:]]tests[[:space:]]+[1-9]' /tmp/unit.log
 

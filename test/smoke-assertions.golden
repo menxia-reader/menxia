@@ -49,6 +49,8 @@ empty-draft-dropped-on-switch
 empty-draft-starts-editing
 external-link-not-hijacked
 fence-line-precise
+float-closes-on-user-scroll
+float-survives-late-programmatic-scroll
 folder-body-anchor-rendered
 folder-body-height-capped
 folder-body-tldr-always-visible
