@@ -127,12 +127,12 @@ export function Sidebar({
         <div class="brand-row"><span class="seal">${S.brand.seal}</span><span class="brand">${S.brand.name}</span></div>
         
         <div class="search-row">
-          <input class="search-input" placeholder=${S.search.placeholder} value=${q}
+          <input class="search-input" placeholder=${S.search.placeholder} aria-label=${S.search.placeholder} value=${q}
             onInput=${(e) => { onQuery(e.target.value); }}
             onKeyDown=${(e) => { if (e.key === 'Enter') onSearch(); if (e.key === 'Escape') onClearSearch(); }} />
           ${(q || hits) && html`<button class="btn-ghost search-clear" onClick=${onClearSearch}>${S.search.clear}</button>`}
         </div>
-        ${searching && html`<p class="state">${searching}</p>`}
+        ${searching && html`<p class="state" role="status">${searching}</p>`}
         ${hits && html`
           <nav id="pr-list" class="search-results">
             ${hits.length ? hits.map(({ pr, hits: hs }) => html`
@@ -151,6 +151,7 @@ export function Sidebar({
         <div class="qian-bar">
           ${qCounts.map((c) => html`
             <button class=${'qian-filter' + (qActive && c.word === qian ? ' active' : '')} data-qian=${c.word}
+              aria-pressed=${qActive && c.word === qian}
               key=${'qf' + c.word} onClick=${() => onQian(qActive && c.word === qian ? null : c.word)}>${S.qian.chip(c.word, c.n)}</button>`)}
           ${qActive && html`<button class="qian-clear" title=${S.qian.clearTitle} onClick=${() => onQian(null)}>${S.qian.clear}</button>`}
         </div>` : ''}
@@ -163,9 +164,9 @@ export function Sidebar({
         </nav>`}
         ${!hits && !qActive && html`
         <div class="list-tabs">
-          <button data-tab="open" class=${'list-tab' + (tab === 'open' ? ' active' : '')} onClick=${() => onTab('open')}>${S.nav.tabOpen(counts.desk.length)}</button>
-          <button data-tab="done" class=${'list-tab' + (tab === 'done' ? ' active' : '')} onClick=${() => onTab('done')}>${S.nav.tabDone(donePrs.length)}</button>
-          <button data-tab="shelf" class=${'list-tab list-tab-shelf' + (tab === 'shelf' ? ' active' : '')} onClick=${() => onTab('shelf')}>${S.nav.tabShelf(shelfCount)}</button>
+          <button data-tab="open" aria-pressed=${tab === 'open'} class=${'list-tab' + (tab === 'open' ? ' active' : '')} onClick=${() => onTab('open')}>${S.nav.tabOpen(counts.desk.length)}</button>
+          <button data-tab="done" aria-pressed=${tab === 'done'} class=${'list-tab' + (tab === 'done' ? ' active' : '')} onClick=${() => onTab('done')}>${S.nav.tabDone(donePrs.length)}</button>
+          <button data-tab="shelf" aria-pressed=${tab === 'shelf'} class=${'list-tab list-tab-shelf' + (tab === 'shelf' ? ' active' : '')} onClick=${() => onTab('shelf')}>${S.nav.tabShelf(shelfCount)}</button>
           ${onDash && html`<button class="list-tab dash-btn" title=${S.nav.dashTitle} onClick=${onDash}>${S.nav.dash}</button>`}
         </div>
         <nav id="pr-list" class=${tab === 'shelf' ? 'shelf-list' : ''}>

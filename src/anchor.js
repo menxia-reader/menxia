@@ -88,11 +88,20 @@ export function rangeFromTextOffset(root, start, len) {
   return null;
 }
 
-export function sectionOf(doc, blockLine) {
+// 标题快照：[{ line, text }]，DOM 序。sectionOf 的预计算形态（2026-11 质量巡检）：
+// 每张草稿卡每次渲染都 querySelectorAll + 逐个 textContent 一遍，40 张卡 × 160 个标题的长折
+// 实测 ~86ms/次渲染（test/perf/bench.mjs）。ui.js 按 [docTick, docPath] 备一份传进来即可。
+// 与 extractOutline 不同：不 trim、不跳空标题——sectionOf 的旧语义原样保留。
+export function headingIndex(doc) {
+  if (!doc) return [];
+  return [...doc.querySelectorAll('h1[data-line],h2[data-line],h3[data-line]')]
+    .map((h) => ({ line: +h.dataset.line, text: h.textContent }));
+}
+
+// heads 缺省时现查 DOM（旧调用点与 DOM 单测不变）；传了就只扫这份快照。
+export function sectionOf(doc, blockLine, heads = headingIndex(doc)) {
   let best = '';
-  doc.querySelectorAll('h1[data-line],h2[data-line],h3[data-line]').forEach((h) => {
-    if (+h.dataset.line <= blockLine) best = h.textContent;
-  });
+  for (const h of heads) if (h.line <= blockLine) best = h.text;
   return best;
 }
 
@@ -100,17 +109,28 @@ export function sectionOf(doc, blockLine) {
 // 文档里找块 → 卡片贴到毫不相干的段落旁边，读者无从对应（PAIN 2026-07-28 #14）。
 // 引文才是稳定的锚：在当前渲染结果里按引文反查它所属块的行号。
 // 取「包含引文且自身文本最短」的块——表格 table/tr 嵌套会同时命中，最短的那个最贴切。
-export function reanchorByQuote(doc, quote) {
+//
+// 性能（2026-11 质量巡检）：每个块都要 textContent + 压空白，而 ui.js 在**每次 App 渲染**里
+// 对每条 outdated 串各调一次——20 条 × 6000 块的长折实测 ~214ms/次渲染。块文本与引文无关，
+// 所以拆出 blockTextIndex 建一次、多条引文共用；index 缺省时现建（旧调用点语义不变）。
+export function blockTextIndex(doc) {
+  if (!doc) return [];
+  const out = [];
+  doc.querySelectorAll('[data-line]').forEach((b) => {
+    const line = +b.dataset.line;
+    if (line) out.push({ line, text: (b.textContent || '').replace(/\s+/g, ' ') });
+  });
+  return out;
+}
+
+export function reanchorByQuote(doc, quote, index) {
   if (!doc || !quote) return null;
   const needle = quote.trim().replace(/\s+/g, ' ');
   if (needle.length < 4) return null; // 太短易误命中，不如不认
   let best = null, bestLen = Infinity;
-  doc.querySelectorAll('[data-line]').forEach((b) => {
-    const line = +b.dataset.line;
-    if (!line) return;
-    const hay = (b.textContent || '').replace(/\s+/g, ' ');
-    if (hay.includes(needle) && hay.length < bestLen) { best = line; bestLen = hay.length; }
-  });
+  for (const { line, text } of index || blockTextIndex(doc)) {
+    if (text.length < bestLen && text.includes(needle)) { best = line; bestLen = text.length; }
+  }
   return best;
 }
 

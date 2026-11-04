@@ -25,7 +25,12 @@ export function ImageView({ src, alt, onClose }) {
   const panelRef = useRef();
   const [full, setFull] = useState(false); // false=合观（塞进屏幕） true=原尺寸（可滚）
   // 开窗即收焦点：否则 Tab 会跑到幕布背后的按钮上，读屏也停在原处（同 thread-view）。
-  useEffect(() => { panelRef.current?.focus(); }, []);
+  // 关窗还焦点（2026-11 质量巡检）：此前收窗后焦点落回 <body>，键盘用户要从页首重新 Tab 回来。
+  useEffect(() => {
+    const opener = document.activeElement;
+    panelRef.current?.focus();
+    return () => { if (opener?.isConnected && typeof opener.focus === 'function') opener.focus({ preventScroll: true }); };
+  }, []);
   return html`
     <div class="img-view-backdrop"
       onMouseDown=${(e) => { if (e.target === e.currentTarget) onClose(); }}>

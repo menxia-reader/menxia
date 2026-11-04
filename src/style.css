@@ -3,8 +3,10 @@
   --paper: #F5EFE3;
   --paper-raised: #FBF7EE;
   --ink: #26211A;
-  --ink-soft: #7A7062;
-  --cinnabar: #C3402B;
+  /* ink-soft / cinnabar 2026-11 各压暗一丝（原 #7A7062 / #C3402B）：小字在宣纸上原为 4.24 / 4.49:1，
+     差一口气够不到 WCAG AA 4.5；现 4.63 / 4.60（raised 上 4.96 / 4.93），肉眼几乎无差。 */
+  --ink-soft: #746A5D;
+  --cinnabar: #C03F2A;
   --cinnabar-deep: #9C2F1F;
   --rule: #E4DAC6;
   --veil: rgba(251, 247, 238, .55);   /* 浮在纸上的面板蒙层（侧栏/卡） */
@@ -239,7 +241,7 @@ aside .brand-row { padding: 0 6px 22px; }
    固定入口，但仍不进「待审 n」的计数、卡也仍压着透明度，不与待审争注意力。
    例外是「未画可」那一组：弘文馆遗留的 open 闲折，还没看过——分组标题与角标要能一眼认出，
    所以不压透明度、角标走墨色实边；但仍不用朱砂，它不催办。 */
-.shelf-hint { font-size: 12px; color: var(--ink-soft); opacity: .75; padding: 2px 6px 8px; margin: 0; }
+.shelf-hint { font-size: 12px; color: var(--ink-soft); padding: 2px 6px 8px; margin: 0; }
 .shelf-group { font-family: var(--songti); font-size: 12.5px; letter-spacing: .08em; color: var(--ink-soft); padding: 8px 6px 4px; margin: 0; }
 .shelf-group-unread { color: var(--ink); }
 .shelf-group + .shelf-group, .pr-item + .shelf-group { margin-top: 10px; border-top: 1px solid var(--rule); padding-top: 12px; }
@@ -753,8 +755,10 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
 @media (prefers-color-scheme: dark) {
   :root {
     --paper: #1C1916; --paper-raised: #232019; --ink: #E8E0D2;
-    --ink-soft: #9A9081; --rule: #3A342B; --cinnabar: #D2543C; --cinnabar-deep: #E06B50;
+    --ink-soft: #9A9081; --rule: #3A342B; --cinnabar: #D76752; --cinnabar-deep: #E06B50;
     /* 蒙层必须跟着翻：浅色 rgba 蒙在深底上会变土绿（真机截图实证） */
+    /* 深色 cinnabar 2026-11 提亮一丝（原 #D2543C）：朱字在深底 4.23 / 3.93:1、朱底钮上的深色字 3.93:1，
+       都不到 AA；提亮后两个方向同时变好（4.96 / 4.61）。 */
     --veil: rgba(46, 41, 33, .55);
     --hover: rgba(58, 52, 43, .60);
     --chip: rgba(58, 52, 43, .55);
@@ -1061,7 +1065,7 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
 .qian-filter:hover { color: var(--ink); }
 .qian-filter.active { background: var(--chip); border-color: var(--cinnabar); color: var(--ink); }
 .qian-clear { padding: 3px 9px; font-size: 12px; color: var(--cinnabar-deep); }
-.qian-crumb { font-size: 12px; color: var(--ink-soft); opacity: .75; padding: 2px 6px 8px; margin: 0; }
+.qian-crumb { font-size: 12px; color: var(--ink-soft); padding: 2px 6px 8px; margin: 0; }
 .pr-item.pr-done::before { background: var(--ink-soft); opacity: .5; }
 .pr-item.pr-done h3 { color: var(--ink-soft); }
 .setup-forget { color: var(--cinnabar-deep); }
@@ -1361,3 +1365,19 @@ button.rel-chip:hover { border-color: var(--ink-soft); color: var(--ink); }
 }
 /* 手机档正文本来铺满，宽度档没有意义，按钮不出现 */
 @media (max-width: 900px) { .read-width { display: none; } }
+
+/* ── 可达性（2026-11 质量巡检）──────────────────────────────────────────
+   键盘焦点环：此前全站没有一条 :focus-visible，按钮靠 UA 默认环（深色底上几乎看不见），
+   输入框 outline:none 只换边框色。只在键盘聚焦时出（:focus-visible），鼠标点击不出环，
+   不打扰指针用户。用 outline 不用 box-shadow：不占布局、不与卡片阴影叠。
+   输入框已有朱砂边框作焦点指示，不重复画环。 */
+:focus-visible { outline: 2px solid var(--cinnabar); outline-offset: 2px; }
+input:focus-visible, textarea:focus-visible,
+.thread-view:focus-visible, .img-view:focus-visible { outline: none; }
+
+/* 减少动态效果：系统要求时关掉过渡；搜索落点的「闪一下」改为不渐变的静态底色，
+   定位提示仍在（1.6s 后消失），只是不再做淡出动画。 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; }
+  .search-flash { animation-timing-function: steps(1, end); }
+}

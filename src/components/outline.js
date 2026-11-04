@@ -30,11 +30,13 @@ export function Outline({ items, docRef, onJump, onGripDown, onGripReset }) {
     const host = scrollHost();
     const doc = docRef?.current;
     if (!host || !doc) return undefined;
+    // 标题节点集在本 effect 生命周期内不变（换文档 → items 变 → effect 重挂），查一次即可，
+    // 不必每个滚动帧都 querySelectorAll 一遍（2026-11 质量巡检）。
+    const heads = [...doc.querySelectorAll('h1[data-line],h2[data-line],h3[data-line]')]
+      .filter((h) => +h.dataset.line);
     const recompute = () => {
       const hostTop = host.getBoundingClientRect().top;
-      const tops = [...doc.querySelectorAll('h1[data-line],h2[data-line],h3[data-line]')]
-        .map((h) => ({ line: +h.dataset.line, top: h.getBoundingClientRect().top - hostTop }))
-        .filter((x) => x.line);
+      const tops = heads.map((h) => ({ line: +h.dataset.line, top: h.getBoundingClientRect().top - hostTop }));
       setActive(activeHeadingLine(tops));
     };
     const onScroll = () => {
@@ -60,7 +62,8 @@ export function Outline({ items, docRef, onJump, onGripDown, onGripReset }) {
         <ol class="toc-list">
           ${items.map((it) => html`
             <li key=${it.id} class=${`toc-item toc-l${it.level}` + (it.line === active ? ' toc-active' : '')}>
-              <button class="toc-link" title=${it.text} onClick=${() => onJump(it.line)}>${it.text}</button>
+              <button class="toc-link" title=${it.text} aria-current=${it.line === active ? 'location' : undefined}
+                onClick=${() => onJump(it.line)}>${it.text}</button>
             </li>`)}
         </ol>`}
     </nav>`;

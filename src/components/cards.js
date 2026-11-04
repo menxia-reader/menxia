@@ -10,10 +10,10 @@ import { S } from '../strings.js';
 // 2026-08-05 报障「我想过去加东西，结果点不开那个评论栏了」——空草稿改不了（点不着）、
 // 删不掉（作罢钮只在编辑态里）、又过不了呈回闸门（空批注不呈），三头堵死。
 // 空草稿本身已由 ui.js 的 editElsewhere 在切走焦点时收掉；这里是给存量草稿留的退路。
-export function DraftCard({ d, doc, editing, onEdit, onSave, onDrop }) {
+export function DraftCard({ d, doc, heads, editing, onEdit, onSave, onDrop }) {
   const taRef = useRef();
   useEffect(() => { if (editing) setTimeout(() => taRef.current?.focus(), 0); }, [editing]);
-  const sec = doc ? A.sectionOf(doc, d.blockLine) : '';
+  const sec = doc ? A.sectionOf(doc, d.blockLine, heads) : '';   // heads：ui.js 备的标题快照，缺省现查
   return html`
     <div class="anno-card" data-block-line=${d.blockLine} key=${d.id}>
       <div class="anno-quote">${S.card.quote(d.quote.length > 80 ? d.quote.slice(0, 80) + '…' : d.quote)}</div>
@@ -33,7 +33,10 @@ export function DraftCard({ d, doc, editing, onEdit, onSave, onDrop }) {
           <button class="anno-save" onMouseDown=${(e) => e.preventDefault()} onClick=${() => onSave(d.id, taRef.current.value)}>${S.action.saveDraft}</button>
         </div>` : html`
         <div class="anno-note${d.note ? '' : ' anno-note-empty'}" title=${S.card.editTitle}
-          onClick=${() => onEdit(d.id)}>${d.note || S.card.emptyNote}</div>`}
+          role="button" tabIndex="0"
+          onClick=${() => onEdit(d.id)}
+          onKeyDown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onEdit(d.id); } }}
+          >${d.note || S.card.emptyNote}</div>`}
     </div>`;
 }
 

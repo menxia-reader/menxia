@@ -689,6 +689,14 @@ function App() {
 
   // F14 篇内大纲：与 blockTops 同源同失效条件（换文档/正文就位重算），只抽标题不动 DOM。
   const outlineItems = useMemo(() => extractOutline(docRef.current), [docTick, docPath]);
+  // 同源同失效条件的两份快照（2026-11 质量巡检，见 test/perf/bench.mjs）：草稿卡的出处标题、
+  // outdated 串的引文反查，原先每次 App 渲染都各自全量扫一遍 DOM。块文本索引惰性建——
+  // 没有 outdated 串的折（绝大多数）一次都不付这笔账。
+  const docHeads = useMemo(() => A.headingIndex(docRef.current), [docTick, docPath]);
+  const blockTexts = useMemo(() => {
+    let cache = null;
+    return () => cache || (cache = A.blockTextIndex(docRef.current));
+  }, [docTick, docPath]);
 
   const layoutCards = useCallback(() => {
     const col = document.getElementById('margin-col');
@@ -1297,8 +1305,9 @@ function App() {
     const outdated = r.line == null;
     // outdated（line=null）先拿引文在当前版正文里反查行号；original_line 是旧版行号，
     // 直接拿它对齐会把卡片贴到错误的段落上（PAIN 2026-07-28 #14），只当反查失败的兜底。
-    const reanchored = outdated
-      ? A.reanchorByQuote(docRef.current, A.parseCommentBody(r.body).quote)
+    // 别的文件上的串反查了也用不上（下面 r.path !== docPath 一律进 otherThreads），跳过。
+    const reanchored = outdated && r.path === docPath
+      ? A.reanchorByQuote(docRef.current, A.parseCommentBody(r.body).quote, blockTexts())
       : null;
     const anchorLine = r.line ?? reanchored ?? r.original_line;
     if (r.path === docPath && anchorLine != null) docThreads.push({ t, blockLine: anchorLine, outdated });
@@ -1313,7 +1322,7 @@ function App() {
   const marginItems = readThrough ? [] : [
     ...docDrafts.map((d) => ({
       blockLine: d.blockLine,
-      el: html`<${DraftCard} key=${d.id} d=${d} doc=${docRef.current} editing=${editing === d.id}
+      el: html`<${DraftCard} key=${d.id} d=${d} doc=${docRef.current} heads=${docHeads} editing=${editing === d.id}
         onEdit=${editElsewhere} onSave=${saveDraft} onDrop=${dropDraft} />`,
     })),
     ...docThreads.map(({ t, blockLine, outdated }) => ({

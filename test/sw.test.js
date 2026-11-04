@@ -81,9 +81,9 @@ test('network-first 真回源：SW 的 fetch 带 networkCacheMode（no-cache）�
     'networkFirst 里的 fetch 必须带 cache: networkCacheMode(request)');
 });
 
-test('SW_VERSION 已为本次应用壳改动升到 v6（旧 menxia-shell-v5 在 activate 时被清）', () => {
-  assert.equal(SW_VERSION, 'v6');
-  assert.equal(cacheName(), 'menxia-shell-v6');
+test('SW_VERSION 已为本次应用壳改动升到 v7（旧 menxia-shell-v6 在 activate 时被清）', () => {
+  assert.equal(SW_VERSION, 'v7');
+  assert.equal(cacheName(), 'menxia-shell-v7');
 });
 
 test('isAppShell：沙箱壳 sandbox.html（destination=iframe）与 vendor/mermaid.min.js 进壳缓存', () => {
