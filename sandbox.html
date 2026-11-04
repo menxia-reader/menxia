@@ -10,10 +10,14 @@
   //   壳 → 主页：{ type: 'svg', id, svg }  |  { type: 'error', id, message }
   //   （height 消息 M1 不用：mermaid 结果以 <img> 回填，主页自己量高）
   // 本页以 sandbox="allow-scripts" 嵌入（opaque origin，无 PAT、无 localStorage）。
-  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+  // vendor 脚本没加载上（CSP 拦了——如 fork 部署在别的域名、上面 script-src 没放行；或文件缺失）：
+  // 照样挂监听、立刻回 error，主页马上显示源码+错误行，不必每张图干等 3s 超时（review M2）。
+  const loaded = typeof mermaid !== 'undefined';
+  if (loaded) mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
   addEventListener('message', async (e) => {
     const m = e.data || {};
     if (m.type !== 'mermaid' || typeof m.src !== 'string') return;
+    if (!loaded) { e.source.postMessage({ type: 'error', id: m.id, message: 'mermaid.min.js not loaded (sandbox CSP script-src / vendor missing)' }, '*'); return; }
     try {
       mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: m.theme === 'dark' ? 'dark' : 'default' });
       const { svg } = await mermaid.render('m' + String(m.id).replace(/[^\w-]/g, ''), m.src);

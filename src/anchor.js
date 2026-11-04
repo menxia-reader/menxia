@@ -34,9 +34,12 @@ export function computeAnchor(doc) {
   // 缩进代码块的 data-line 在 <pre> 上、直接是首行（均实测确认）。
   // ```diff 围栏例外：diffFence（render.js）把 data-line 打在 <pre class="diff-block"> 上，
   // 但它仍是围栏、data-line 指向 ``` 行，同样要 +1——按标签判会少算一行，涂归呈到上一行（review #182 N0 查出）。
-  if (el.tagName === 'CODE' || el.tagName === 'PRE') {
+  // mermaid 渲出的 figure（mermaid.js figureFor）承接原 fence 的 data-line（指向 ``` 行），
+  // 源码在 figure 内折叠的 <details><pre><code> 里——同样按围栏 +1 算行（review M1）。
+  const isMermaidFig = el.tagName === 'FIGURE' && el.classList.contains('mermaid-fig');
+  if (el.tagName === 'CODE' || el.tagName === 'PRE' || isMermaidFig) {
     const container = el.tagName === 'CODE' ? el : (el.querySelector('code') || el);
-    const isFence = el.tagName === 'CODE' || el.classList.contains('diff-block');
+    const isFence = el.tagName === 'CODE' || isMermaidFig || el.classList.contains('diff-block');
     try {
       const r2 = document.createRange();
       r2.selectNodeContents(container);

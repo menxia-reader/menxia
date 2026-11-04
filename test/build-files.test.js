@@ -38,6 +38,18 @@ test('BUILD_FILES 里没有已删除的僵尸条目（fetch 失败会让整次�
   const ui = readFileSync(join(ROOT, 'src/ui.js'), 'utf8');
   const listed = [...(/const BUILD_FILES = \[([\s\S]*?)\];/.exec(ui)?.[1] || '').matchAll(/'([^']+)'/g)]
     .map((m) => m[1]);
-  const onDisk = new Set([...sourceFiles(), 'index.html']);
+  const onDisk = new Set([...sourceFiles(), 'index.html', 'sandbox.html']);
   assert.deepEqual(listed.filter((f) => !onDisk.has(f)), []);
+});
+
+// review M7：mermaid 沙箱壳与它的 vendor 脚本不在 src/ 下，上面那条对账抓不到——单独钉住。
+test('sandbox.html 进 BUILD_FILES（只改它也提示新版）、vendor/mermaid.min.js 进 VENDOR_FILES（强制更新会重取）', () => {
+  const ui = readFileSync(join(ROOT, 'src/ui.js'), 'utf8');
+  const list = (name) => new Set([...(new RegExp(`const ${name} = \\[([\\s\\S]*?)\\];`).exec(ui)?.[1] || '')
+    .matchAll(/'([^']+)'/g)].map((m) => m[1]));
+  assert.ok(list('BUILD_FILES').has('sandbox.html'));
+  const vendor = list('VENDOR_FILES');
+  assert.ok(vendor.has('vendor/mermaid.min.js'));
+  // 清单里每个 vendor 文件都得真在盘上（同上：fetch 404 会让更新流程半途而废）
+  for (const f of vendor) assert.ok(readdirSync(join(ROOT, 'vendor')).includes(f.replace('vendor/', '')), f);
 });

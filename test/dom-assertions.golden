@@ -7,6 +7,9 @@ fence 行号落在 <code> 上且指向 ``` 行
 h1 行号
 h2 行号
 id 与 data-line 并存（涂归的锚不能被页内锚顶掉）
+mermaid figure 内划选源码第二行 → 精确到该行（与 fence 同样 +1）
+mermaid figure：草稿高亮按引文在 figure 里定位得到
+mermaid figure：过期评论按引文重锚回 fence 行
 table 行号
 不开 headingIds 时一个 id 都不打
 划中内联格式内的字仍锚到源行（文本搜索会失败，DOM 主锚不会）

@@ -9,7 +9,8 @@
 <script src="../vendor/markdown-it.min.js"></script>
 <script type="module">
 import { renderMarkdown } from '../src/render.js';
-import { computeAnchor, rangeForDraft, rangeFromTextOffset, sectionOf } from '../src/anchor.js';
+import { computeAnchor, rangeForDraft, rangeFromTextOffset, sectionOf, reanchorByQuote } from '../src/anchor.js';
+import { figureFor } from '../src/mermaid.js';
 
 let pass = 0, fail = 0;
 const eq = (name, got, want) => {
@@ -125,6 +126,22 @@ ok_('撞词：按块内偏移定位到第二处而非永远第一处',
   `first=${rFirst?.startOffset} second=${rSecond?.startOffset}`);
 eq('引文不存在时返回 null（不乱画高亮）',
   rangeForDraft(stage, { blockLine: 1, quoteRaw: '根本没有这句', offset: 0 }), null);
+
+// ── 3b. mermaid 渲图后的锚定（review M1）：figure 替掉 pre 后，源码留在折叠的 <details> 里 ──
+// 修前 figure 只有 <img>：划不中源码、草稿高亮 / 按引文重锚都在空 textContent 里找不到。
+stage.innerHTML = renderMarkdown(['段落', '', '```mermaid', 'graph TD', '  甲节点 --> 乙节点', '```'].join('\n'));
+{
+  const pre = stage.querySelector('pre');
+  const src = pre.querySelector('code').textContent;
+  pre.replaceWith(figureFor(pre, 'blob:x', 'mermaid', src, '图源码'));
+  stage.querySelector('figure.mermaid-fig details').open = true;   // 展开才能真划选
+  selectText(stage, '甲节点 --> 乙节点');
+  const a = computeAnchor(stage);
+  eq('mermaid figure 内划选源码第二行 → 精确到该行（与 fence 同样 +1）', a?.line, 5);
+  ok_('mermaid figure：草稿高亮按引文在 figure 里定位得到', a && rangeForDraft(stage, a)?.toString() === '甲节点 --> 乙节点');
+  eq('mermaid figure：过期评论按引文重锚回 fence 行', reanchorByQuote(stage, '甲节点 --> 乙节点'), 3);
+  getSelection().removeAllRanges();
+}
 
 // ── 4. sectionOf：批注卡上的出处 ──
 stage.innerHTML = renderMarkdown(MD);

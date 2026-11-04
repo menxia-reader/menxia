@@ -80,9 +80,11 @@ const BUILD_FILES = ['index.html', 'src/style.css', 'src/ui.js', 'src/github.js'
   'src/verify.js',
   // M2 离线包新增源文件（sw.js 在仓根、不在 src/ 下，故不进这张只管 src/ 的清单；
   // 它自身带 SW_VERSION 版本号 + activate 清旧 cache，失效链路独立于 detectNewBuild）
-  'src/offline.js', 'src/sw-register.js', 'src/sw-register-const.js'];
+  'src/offline.js', 'src/sw-register.js', 'src/sw-register-const.js',
+  // mermaid 沙箱壳（仓根，iframe 加载、不在 src/ 下）：只改它也要算新版（review M7）
+  'sandbox.html'];
 // 「更新到最新版」顺带回源的第三方依赖（不进指纹：它们几乎不变，算进去只会拖慢每次开机检测）
-const VENDOR_FILES = ['vendor/preact-standalone.mjs', 'vendor/markdown-it.min.js'];
+const VENDOR_FILES = ['vendor/preact-standalone.mjs', 'vendor/markdown-it.min.js', 'vendor/mermaid.min.js'];
 async function detectNewBuild() {
   try {
     const texts = await Promise.all(BUILD_FILES.map((f) => fetch(`./${f}`, { cache: 'reload' }).then((r) => r.text())));
@@ -597,18 +599,32 @@ function App() {
         if (dead) return;
         setDocTick((t) => t + 1);
         // 渲图在 tick 之后异步做（沙箱加载慢不拖大纲/批注卡），做完再 tick 一次重排
-        hydrateMermaid(el, DEMO ? { timeoutMs: 30000 } : {}).then(() => { if (!dead) setDocTick((t) => t + 1); });
+        const mm = hydrateMermaid(el, DEMO ? { timeoutMs: 30000 } : {});
+        mm.then(() => { if (!dead) setDocTick((t) => t + 1); });
         const jp = jumpRef.current;
         if (jp && jp.prNumber === cur.pr.number && (!jp.path || jp.path === docPath)) {
           jumpRef.current = null;
+          // 跨篇锚点：带 frag 的走标题 slug 匹配（jumpToAnchor 自带「找不到就出声」）；
+          // 其余仍走 data-line ≤ 目标行的最近块，两条落点共用 flashTo。
+          let target = null;
           setTimeout(() => {
-            // 跨篇锚点：带 frag 的走标题 slug 匹配（jumpToAnchor 自带「找不到就出声」）；
-            // 其余仍走 data-line ≤ 目标行的最近块，两条落点共用 flashTo。
-            if (jp.frag) { jumpToAnchor(jp.frag); return; }
-            let target = null;
+            if (dead) return;
+            if (jp.frag) { target = jumpToAnchor(jp.frag); return; }
             el.querySelectorAll('[data-line]').forEach((b) => { if (+b.dataset.line <= jp.line) target = b; });
             flashTo(target, 'center');
           }, 60);
+          // 图在目标上方渲成 figure 会把目标推走；没有 scroll anchoring 的浏览器（iOS Safari）
+          // 里高亮段落会滑出视野（review M3）。渲完若真换了图，按原落点再对齐一次（不再闪）。
+          // 读者在等图期间自己动过（滚轮/触摸/按键）就不再把他拽回去。
+          let userMoved = false;
+          const moved = () => { userMoved = true; };
+          const evs = ['wheel', 'touchstart', 'keydown', 'pointerdown'];
+          evs.forEach((t) => window.addEventListener(t, moved, { once: true, passive: true }));
+          mm.then((n) => {
+            evs.forEach((t) => window.removeEventListener(t, moved));
+            if (dead || userMoved || !n || !target || !target.isConnected) return;
+            target.scrollIntoView({ block: jp.frag ? 'start' : 'center' });
+          });
         }
       } catch (err) {
         if (dead) return;
@@ -1109,8 +1125,9 @@ function App() {
     const heads = [...el.querySelectorAll('h1[id],h2[id],h3[id],h4[id],h5[id],h6[id]')]
       .map((h) => ({ id: h.id, text: h.textContent || '', el: h }));
     const hit = matchAnchor(heads, frag);
-    if (!hit) return say(S.jump.anchorMissing(frag));
+    if (!hit) { say(S.jump.anchorMissing(frag)); return null; }
     flashTo(hit.el);
+    return hit.el;
   }
   // 章栏点某章：通读态滚到该章的 <section>（不换文档，整本还摊着）；分章态照旧切文档。
   function openChapter(path) {

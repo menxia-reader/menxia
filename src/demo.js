@@ -1550,6 +1550,13 @@ if (new URLSearchParams(location.search).get('mm') === '1') {
     const fig = document.querySelector('figure.mermaid-fig');
     chk('mermaid-figure-keeps-data-line', Boolean(fig) && fig.getAttribute('data-line') === String(fence),
       `fig=${fig ? fig.getAttribute('data-line') : 'none'} fence=${fence}`);
+    // review M1：figure 里留着图源码，按引文重锚仍回到 fence 行（修前 figure 只有 <img>，textContent 为空）
+    const { reanchorByQuote } = await import('./anchor.js');
+    const srcLine = (DOC.split('\n')[fence] || '').trim();
+    chk('mermaid-figure-keeps-source-for-anchoring',
+      Boolean(fig) && srcLine.length >= 4 && fig.textContent.includes(srcLine)
+        && reanchorByQuote(fig.parentElement, srcLine) === fence,
+      `src=${srcLine.slice(0, 30)} re=${fig ? reanchorByQuote(fig.parentElement, srcLine) : 'none'}`);
     chk('mermaid-bad-fence-keeps-source-with-error',
       Boolean(document.querySelector('pre > code.language-mermaid')) && Boolean(document.querySelector('.mermaid-err')));
     chk('mermaid-iframe-sandbox-exactly-allow-scripts', Boolean(f) && f.getAttribute('sandbox') === 'allow-scripts',
