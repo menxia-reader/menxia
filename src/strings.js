@@ -46,7 +46,7 @@ export const S = deepFreeze({
   action: {
     refresh: '刷新',
     more: '⋯',
-    moreTitle: '更多：刷新 / 引用此处 / 回奏 / 携卷 / 字号 / 阅读宽度 / 外观',
+    moreTitle: '更多：刷新 / 引用此处 / 回奏 / 携卷 / 字号 / 阅读宽度 / 主题 / 外观',
     copyRef: '引用此处',
     copyRefTitle: '拷涂归直达链（按住 Alt 拷 GitHub 链接）',
     happy: '回奏',
@@ -105,6 +105,12 @@ export const S = deepFreeze({
   appearance: {
     label: (t) => `外观·${({ auto: '跟随系统', light: '浅色', dark: '深色' })[t] ?? '跟随系统'}`,
     title: (t) => `外观：${({ auto: '跟随系统（默认）', light: '浅色', dark: '深色' })[t] ?? '跟随系统（默认）'} —— 点一下切换，记住选择`,
+  },
+
+  // 主题（「⋯」里，点一下轮换）：书卷 B（默认）/ 克制 A / 墨线 C，三稿都留着给 Charlie 试。
+  style: {
+    label: (s) => `主题·${({ b: '书卷', a: '克制', c: '墨线' })[s] ?? '书卷'}`,
+    title: (s) => `主题：${({ b: '书卷（B，默认）', a: '克制（A）', c: '墨线（C）' })[s] ?? '书卷（B，默认）'} —— 点一下切换，记住选择`,
   },
 
   // 侧栏导航 / 三栏清单

@@ -103,6 +103,8 @@ search-pr-number-cross-tab
 shown-threads>=1
 stale-empty-draft-opens-editor
 stale-empty-draft-still-clickable
+style-switch-keeps-actions-usable
+style-switch-sets-data-style
 submit-body-nonempty
 submit-btn-visible
 submit-commit-id

@@ -14,7 +14,10 @@ import { decorateVerifyMarkers, countVerifyMarkers } from './verify.js';
 import { parseZhupiLink, buildRef, parseDeepLink, buildDeepLink, parseHappySession, resolveRelativeDocLink } from './link.js';
 import { siblingFor, visibleDocs, getLang, setLang, variantOf } from './lang.js';
 import { getReadStep, setReadStep, scaleOf, clampStep } from './readsize.js';
-import { getTheme, setTheme, nextTheme, applyTheme, clampTheme } from './theme.js';
+import {
+  getTheme, setTheme, nextTheme, applyTheme, clampTheme,
+  getStyle, setStyle, nextStyle, applyStyle, clampStyle,
+} from './theme.js';
 import { getRailWidth, setRailWidth, clearRailWidth, clampRail, railMax, isResizable, RAIL_MIN, railCeilLending, railLend } from './rail.js';
 import { Setup } from './components/setup.js';
 import { DraftCard, ShownThread, ZongpiCard } from './components/cards.js';
@@ -56,6 +59,9 @@ const api = DEMO ? demoApi : gh;
 // `?theme=light|dark` 只管本次会话（截图 / 冒烟用），不落盘；没带参数就读存的档。
 const THEME_PARAM = params.get('theme');
 applyTheme(THEME_PARAM ?? getTheme());
+// 主题同理：?style=a|b|c 只管本次会话。
+const STYLE_PARAM = params.get('style');
+applyStyle(STYLE_PARAM ?? getStyle());
 
 // 本设备名：用于续读标记里区分「上次在哪台读的」。记在 localStorage，缺省给个短随机名。
 function deviceName() {
@@ -182,6 +188,7 @@ function App() {
   const [lang, setLangState] = useState(getLang()); // F8：中/EN 偏好，记住上次
   const [readStep, setReadStepState] = useState(getReadStep()); // 正文字号档位，记住上次
   const [theme, setThemeState] = useState(THEME_PARAM ? clampTheme(THEME_PARAM) : getTheme());   // 外观：跟随系统 / 浅色 / 深色，记住上次
+  const [style, setStyleState] = useState(STYLE_PARAM ? clampStyle(STYLE_PARAM) : getStyle());   // 主题：书卷 / 克制 / 墨线，记住上次
   // 左栏宽度。null = 从没拖过，别管它，让 CSS 的响应式默认说了算（宽窗 300 / 笔记本档 240）。
   const [railW, setRailW] = useState(getRailWidth());
   const probeRef = useRef(null);   // 版心几何探针，见 style.css 的 .geom-probe
@@ -1739,6 +1746,7 @@ function App() {
           onWidthPreset=${() => { const p = nextWidthPreset(widthPreset); setWidthPresetState(p); setWidthPreset(p); }}
           moreOpen=${moreOpen} onMore=${() => setMoreOpen((o) => !o)}
           theme=${theme} onTheme=${() => { const t = nextTheme(theme); setThemeState(t); setTheme(t); applyTheme(t); }}
+          style=${style} onStyle=${() => { const s = nextStyle(style); setStyleState(s); setStyle(s); applyStyle(s); }}
           updating=${updating}
           onUpdate=${() => { setUpdating(true); say(S.stale.updating); hardUpdate([...BUILD_FILES, ...VENDOR_FILES]); }}
           onReadStep=${(i) => { const c = clampStep(i); setReadStepState(c); setReadStep(c); }}

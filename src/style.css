@@ -1428,3 +1428,179 @@ input:focus-visible, textarea:focus-visible,
   *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; }
   .search-flash { animation-timing-function: steps(1, end); }
 }
+
+/* ═══ 主题（2026-11-03）：书卷 b 是上面的基础样式；克制 a 与墨线 c 在这里覆盖 ═══
+   theme.js 把 `data-style="a|c"` 挂到 <html>（b 不挂）。DOM 钩子一个不动，结构差异只用 CSS 表达。
+   选择器统一 `html[data-style=…] .x`，特异度 (0,2,1) 压过上面所有单类规则；手机档 `#app button` 的
+   44px 兜底是 (1,0,1)，仍压过这里——触控下限不随主题变。
+   配色：a 与 b 同一套纸/墨/朱砂；c 换成更冷一档的纸与实色 --chip（选中行灰底）。深色各自一份，
+   浅/深 × 三主题六套的对比度由 test/palette.test.js 从本文件算（正文 ≥7:1、次要 ≥4.5:1）。
+   同外观那段：`[data-theme="dark"]` 与媒体查询里的块必须逐字相同，测试会比对。 */
+
+/* ── 克制 A：现在的门下把没决定过的默认值决定掉——卡保留但瘦身、8px 面板角 / 999 动作角、无阴影、
+   宋体 h1 32 / h2 22、正文 16.5 / 1.9；朱砂仍只两处；没有朱丝栏。 */
+html[data-style="a"] { --t-body: 16.5px; --t-h2: 22px; --t-h1: 32px; }
+html[data-style="a"] .stage-main::before { display: none; }
+html[data-style="a"] article p, html[data-style="a"] article ul, html[data-style="a"] article ol { line-height: 1.9; }
+/* 清单：卡，三行见底；当前卡浮纸底 + 细边，左缘一道墨 */
+html[data-style="a"] #pr-list { margin-left: 0; padding-left: 0; }
+html[data-style="a"] .pr-item { padding: 12px 14px; margin-bottom: 6px; border: 1px solid transparent; border-radius: 8px; }
+html[data-style="a"] .pr-item:hover { background: var(--hover); }
+html[data-style="a"] .pr-item.active { background: var(--paper-raised); border-color: var(--rule); }
+html[data-style="a"] .pr-item.active::before { left: -1px; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; }
+html[data-style="a"] .pr-item h3 { order: 1; margin-top: 0; font-size: 15px; font-weight: 700; line-height: 1.45; }
+html[data-style="a"] .pr-item .meta { order: 2; margin-top: 4px; }
+html[data-style="a"] .list-tabs { gap: 2px; border-bottom: 0; padding-bottom: 8px; }
+html[data-style="a"] .list-tab { padding: 5px 9px; border-radius: 6px; font-family: var(--sans); font-size: var(--t-xs); letter-spacing: 0; }
+html[data-style="a"] .list-tab.active { background: var(--chip); font-weight: 600; }
+html[data-style="a"] .search-input { padding: 8px 12px; border: 1px solid var(--rule); border-radius: 8px; }
+/* 动作：药丸 ghost + 墨色药丸「可」 */
+html[data-style="a"] .btn-ghost, html[data-style="a"] .btn-primary {
+  padding: 6px 14px; border: 1px solid var(--rule); border-radius: 999px;
+  font-family: var(--sans); font-size: var(--t-s); letter-spacing: 0;
+}
+html[data-style="a"] .btn-primary { border-color: var(--cinnabar); color: var(--cinnabar-deep); font-weight: 600; }
+html[data-style="a"] .more-btn { border: 0; }
+html[data-style="a"] .more-menu .btn-ghost { border: 0; border-radius: 0; }
+html[data-style="a"] .btn-qinci { width: auto; padding: 0 18px; border-radius: 999px; letter-spacing: .2em; text-indent: .2em; }
+html[data-style="a"] .crumb { font-family: var(--sans); letter-spacing: 0; }
+/* 正文之上的控件：文字 + 墨色底线（mock-A 的 .ctl） */
+html[data-style="a"] .doc-tab.active, html[data-style="a"] .rev-opt.active, html[data-style="a"] .lang-opt.active,
+html[data-style="a"] .read-through-toggle.on { text-decoration: none; box-shadow: inset 0 -1.5px var(--ink); }
+/* 折子说明 / 已呈判 / 眉批：边线卡，无阴影，8px 角；有拍板点的折子说明与草稿眉批朱砂描左缘 */
+html[data-style="a"] .folder-body, html[data-style="a"] .zongpi-shown {
+  padding: 10px 16px; background: var(--paper-raised); border: 1px solid var(--rule);
+  border-left: 3px solid var(--ink-soft); border-radius: 8px;
+}
+html[data-style="a"] .folder-body.has-decisions { border-left-color: var(--cinnabar); }
+html[data-style="a"] .folder-body-toggle.has-decisions::before { display: none; }
+html[data-style="a"] .anno-card {
+  padding: 12px 14px; background: var(--paper-raised); border: 1px solid var(--rule); border-radius: 8px;
+}
+html[data-style="a"] .anno-card:not(.anno-shown) { border-color: var(--cinnabar); }
+html[data-style="a"] .anno-card::before { top: 22px; background: var(--ink-soft); opacity: .5; }
+html[data-style="a"] .anno-quote, html[data-style="a"] .anno-quote-shown { border-left: 2px solid var(--ink-soft); padding-left: 9px; }
+html[data-style="a"] .anno-quote::before, html[data-style="a"] .anno-quote::after,
+html[data-style="a"] .anno-quote-shown::before, html[data-style="a"] .anno-quote-shown::after { content: ""; }
+html[data-style="a"] .anno-note { font-family: var(--sans); }
+html[data-style="a"] .anno-input { padding: 8px 10px; font-family: var(--sans); background: var(--paper); border: 1px solid var(--rule); border-radius: 6px; }
+html[data-style="a"] .anno-row { justify-content: flex-end; gap: 8px; }
+html[data-style="a"] .anno-save { padding: 5px 16px; border-radius: 999px; background: var(--cinnabar); color: var(--paper-raised); }
+html[data-style="a"] .anno-save:hover { background: var(--cinnabar-deep); color: var(--paper-raised); }
+html[data-style="a"] .anno-ghost { padding: 5px 12px; border: 1px solid var(--rule); border-radius: 999px; }
+html[data-style="a"] .zongpi-card { border-left-width: 1px; }
+/* 表格：A 保留细网格，表头去底色去粗体 */
+html[data-style="a"] article th, html[data-style="a"] article td { border: 1px solid var(--rule); padding: 8px 12px; }
+html[data-style="a"] article th { font-family: var(--sans); font-weight: 400; color: var(--ink-soft); font-size: calc(var(--t-xs) * var(--read-scale)); }
+html[data-style="a"] article pre { border: 1px solid var(--rule); border-radius: 8px; }
+html[data-style="a"] article img { border: 1px solid var(--rule); border-radius: 8px; }
+html[data-style="a"] .toc, html[data-style="a"] .chapter-rail { border: 1px solid var(--rule); border-radius: 8px; padding: 8px 6px; }
+html[data-style="a"] .dash-row { border-radius: 8px; border-bottom-color: transparent; padding: 9px 12px; margin-bottom: 3px; }
+html[data-style="a"] .dash-row.active { background: var(--paper-raised); box-shadow: inset 0 0 0 1px var(--rule); }
+html[data-style="a"] .dash-row.active::before { display: none; }
+html[data-style="a"] .dash-proj { border-bottom: 1px solid var(--rule); }
+
+/* ── 墨线 C：工作台。黑白为主、密一档、4px 方角、线只画在表格与分隔处；宋体只给 article 标题；
+   清单是行（选中 = 灰底）；眉批是灰底平面板 + 墨色编号 ①②（CSS counter）；朱砂只剩「等你拍」的点与草稿。 */
+@counter-style zhupi-circled { system: fixed; symbols: ① ② ③ ④ ⑤ ⑥ ⑦ ⑧ ⑨ ⑩ ⑪ ⑫ ⑬ ⑭ ⑮ ⑯ ⑰ ⑱ ⑲ ⑳; suffix: ""; }
+html[data-style="c"] {
+  --t-body: 16.5px; --t-h2: 21px; --t-h1: 28px;
+  --paper: #F3EEE4; --paper-raised: #FAF7F0; --ink: #1F1B16; --ink-soft: #655C50;
+  --rule: #DCD4C4; --chip: #EAE3D3; --hover: #EFE9DC; --veil: transparent;
+}
+html[data-style="c"][data-theme="dark"] {
+  --paper: #1A1714; --paper-raised: #221F1B; --ink: #ECE5D6; --ink-soft: #ADA394;
+  --rule: #3A342B; --chip: #2E2922; --hover: #2A2520; --veil: transparent;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-style="c"]:not([data-theme="light"]) {
+    --paper: #1A1714; --paper-raised: #221F1B; --ink: #ECE5D6; --ink-soft: #ADA394;
+    --rule: #3A342B; --chip: #2E2922; --hover: #2A2520; --veil: transparent;
+  }
+}
+html[data-style="c"] .stage-main::before { display: none; }
+html[data-style="c"] article p, html[data-style="c"] article ul, html[data-style="c"] article ol { line-height: 1.85; }
+html[data-style="c"] #app a { color: var(--ink); text-decoration-color: var(--ink-soft); }
+html[data-style="c"] .seal { background: var(--ink); transform: none; border-radius: 3px; box-shadow: none; }
+html[data-style="c"] .brand { font-size: 17px; letter-spacing: .12em; }
+/* 清单：密行。sans 600 标题单行截断，摘要单行，选中灰底无线 */
+html[data-style="c"] #pr-list { margin-left: 0; padding-left: 0; }
+html[data-style="c"] .pr-item { padding: 8px 10px; border-bottom: 0; border-radius: 4px; }
+html[data-style="c"] .pr-item:hover { background: var(--hover); }
+html[data-style="c"] .pr-item.active { background: var(--chip); }
+html[data-style="c"] .pr-item.active::before { display: none; }
+html[data-style="c"] .pr-item h3 { order: 1; margin: 0; font-family: var(--sans); font-size: var(--t-s); font-weight: 600; line-height: 1.45; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-wrap: initial; }
+html[data-style="c"] .pr-item.active h3 { font-weight: 600; }
+html[data-style="c"] .pr-item:hover h3 { color: var(--ink); }
+html[data-style="c"] .pr-item .meta { order: 2; margin-top: 1px; line-height: 1.5; }
+html[data-style="c"] .pr-summary { margin-top: 1px; }
+html[data-style="c"] .pr-tldr { -webkit-line-clamp: 1; }
+html[data-style="c"] .pr-decisions { margin-top: 1px; }
+html[data-style="c"] .list-tabs { gap: 18px; padding-bottom: 0; }
+html[data-style="c"] .list-tab { padding: 6px 0 8px; font-family: var(--sans); letter-spacing: 0; margin-bottom: -1px; box-shadow: none; }
+html[data-style="c"] .list-tab.active { font-weight: 600; box-shadow: inset 0 -2px var(--ink); }
+html[data-style="c"] .search-input { font-size: var(--t-s); }
+/* 动作：4px 方钮，sans */
+html[data-style="c"] .btn-ghost, html[data-style="c"] .btn-primary {
+  padding: 5px 12px; border: 1px solid var(--rule); border-radius: 4px; background: var(--paper-raised);
+  font-family: var(--sans); font-size: var(--t-s); letter-spacing: 0;
+}
+html[data-style="c"] .btn-primary { border-color: var(--cinnabar); color: var(--cinnabar-deep); font-weight: 600; }
+html[data-style="c"] .more-btn { border: 0; background: none; }
+html[data-style="c"] .more-menu { border-radius: 4px; }
+html[data-style="c"] .more-menu .btn-ghost { border: 0; border-radius: 0; background: none; }
+html[data-style="c"] .btn-qinci { width: auto; padding: 0 16px; border-radius: 4px; font-family: var(--sans); font-weight: 600; font-size: var(--t-s); }
+html[data-style="c"] .crumb { font-family: var(--sans); letter-spacing: 0; }
+html[data-style="c"] .crumb b { font-size: var(--t-body); font-weight: 600; }
+html[data-style="c"] .zhupi-float, html[data-style="c"] .mobile-bar-qinci { border-radius: 4px; }
+/* 控件一行：下划线 tab */
+html[data-style="c"] .doc-tabs { border-bottom: 1px solid var(--rule); gap: 16px; }
+html[data-style="c"] .doc-tab { padding: 4px 0 8px; margin-bottom: -1px; }
+html[data-style="c"] .doc-tab.active, html[data-style="c"] .rev-opt.active, html[data-style="c"] .lang-opt.active,
+html[data-style="c"] .read-through-toggle.on { text-decoration: none; box-shadow: inset 0 -2px var(--ink); }
+/* 折子说明 / 已呈判：键值表的壳（1px 线 + 4px 角）；复选清单不在本轮 */
+html[data-style="c"] .folder-body, html[data-style="c"] .zongpi-shown {
+  padding: 8px 14px; background: var(--paper-raised); border: 1px solid var(--rule); border-radius: 4px;
+}
+html[data-style="c"] .folder-body-toggle, html[data-style="c"] .zongpi-shown-toggle { font-family: var(--sans); letter-spacing: 0; }
+html[data-style="c"] .folder-body-toggle.has-decisions { color: var(--cinnabar-deep); font-weight: 600; }
+html[data-style="c"] .folder-body-toggle.has-decisions::before { display: none; }
+/* 眉批：灰底平面板，没有引线，靠墨色编号 ①② */
+html[data-style="c"] .margin-col, html[data-style="c"] .other-threads-list { counter-reset: zhupi-anno; }
+html[data-style="c"] .anno-card {
+  padding: 10px 12px; background: var(--chip); border: 0; border-radius: 4px; counter-increment: zhupi-anno;
+}
+html[data-style="c"] .anno-card:not(.anno-shown) { background: var(--paper-raised); box-shadow: inset 0 0 0 1px var(--cinnabar); }
+html[data-style="c"] .anno-card::before {
+  content: counter(zhupi-anno, zhupi-circled); position: absolute; left: -12px; top: 10px; width: 20px; height: 20px;
+  display: grid; place-items: center; border-radius: 3px; background: var(--ink); color: var(--paper-raised);
+  font: 600 11px/1 var(--sans); opacity: 1;
+}
+html[data-style="c"] .anno-card:not(.anno-shown)::before { background: var(--cinnabar); }
+html[data-style="c"] .zongpi-card { counter-increment: none; box-shadow: 0 6px 24px var(--shadow); }
+html[data-style="c"] .zongpi-card::before { display: none; }
+html[data-style="c"] .anno-static::before { display: grid; }
+html[data-style="c"] .anno-quote, html[data-style="c"] .anno-quote-shown, html[data-style="c"] .anno-note { font-family: var(--sans); }
+html[data-style="c"] .anno-reply { border-left: 0; padding: 7px 0 0; border-top: 1px solid var(--rule); }
+html[data-style="c"] .anno-input { padding: 7px 9px; font-family: var(--sans); background: var(--paper); border: 1px solid var(--rule); border-radius: 3px; }
+html[data-style="c"] .anno-row { justify-content: flex-end; gap: 8px; }
+html[data-style="c"] .anno-save { padding: 4px 14px; border-radius: 4px; background: var(--cinnabar); color: var(--paper-raised); font-family: var(--sans); letter-spacing: 0; }
+html[data-style="c"] .anno-save:hover { background: var(--cinnabar-deep); color: var(--paper-raised); }
+html[data-style="c"] .anno-ghost { padding: 4px 10px; border: 1px solid var(--rule); border-radius: 4px; font-family: var(--sans); letter-spacing: 0; }
+/* 表格 / 代码 / 图：1px 线 + 4px 角，表头 sans 小灰字 */
+html[data-style="c"] article th, html[data-style="c"] article td { border: 1px solid var(--rule); padding: 7px 10px; line-height: 1.55; }
+html[data-style="c"] article th { font-family: var(--sans); font-weight: 400; color: var(--ink-soft); font-size: calc(var(--t-xs) * var(--read-scale)); }
+html[data-style="c"] article pre { border: 1px solid var(--rule); border-radius: 4px; }
+html[data-style="c"] article img { border: 1px solid var(--rule); border-radius: 4px; }
+html[data-style="c"] .toc, html[data-style="c"] .chapter-rail { border: 1px solid var(--rule); border-radius: 4px; padding: 6px; }
+html[data-style="c"] .toc-head, html[data-style="c"] .chapter-rail-head, html[data-style="c"] .chapter-rail-opt,
+html[data-style="c"] .chapters-cur, html[data-style="c"] .chapters-opt, html[data-style="c"] .search-group-title,
+html[data-style="c"] .shelf-group, html[data-style="c"] .sec-label, html[data-style="c"] .mobile-bar-btn, html[data-style="c"] .nav-chapter { font-family: var(--sans); letter-spacing: 0; }
+/* 邸报：天然行式，折号列右对齐 + 4px 角 + 选中灰底 */
+html[data-style="c"] .dash-num { text-align: right; }
+html[data-style="c"] .dash-title { font-family: var(--sans); font-size: var(--t-s); font-weight: 500; }
+html[data-style="c"] .dash-proj { font-family: var(--sans); font-size: var(--t-s); font-weight: 600; border-bottom: 1px solid var(--rule); }
+html[data-style="c"] .dash-h { font-family: var(--sans); font-weight: 600; font-size: 18px; }
+html[data-style="c"] .dash-row { padding: 7px 8px; border-radius: 4px; }
+html[data-style="c"] .dash-row.active { background: var(--chip); }
+html[data-style="c"] .dash-row.active::before { display: none; }

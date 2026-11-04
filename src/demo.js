@@ -1475,6 +1475,37 @@ async function runSmoke(docEl) {
   chk('mobile-bar-hidden-on-desktop', Boolean(mbar) && getComputedStyle(mbar).display === 'none',
     `display=${mbar ? getComputedStyle(mbar).display : 'NO-EL'}`);
 
+  // ── 主题切换（书卷 b / 克制 a / 墨线 c，2026-11-03）：⋯ 菜单里「主题·…」点一下轮换，
+  // data-style 要真挂到 <html> 上；换皮之后 判 / 画可 / 清单条目仍要看得见、点得着（结构差异只在 CSS）。
+  // 最后轮回 b 复原，别让后面的断言在别的主题下跑。 ──
+  {
+    const moreBtn = document.querySelector('.more-btn');
+    moreBtn?.click();
+    await sleep(120);
+    const styleBtn = document.querySelector('.style-btn');
+    const root = document.documentElement;
+    const before = root.getAttribute('data-style');
+    styleBtn?.click();
+    await sleep(120);
+    const afterA = root.getAttribute('data-style');
+    const shownEl = (el) => Boolean(el) && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().height > 0;
+    const usable = shownEl(document.querySelector('.btn-qinci')) && shownEl(document.querySelector('.pr-item'))
+      && shownEl([...document.querySelectorAll('.btn-ghost')].find((b) => b.textContent.includes('判')))
+      && shownEl(document.querySelector('.stage-main article h1'));
+    chk('style-switch-sets-data-style', before === null && afterA === 'a' && styleBtn?.textContent.includes('克制'),
+      `before=${before} after=${afterA} label=${styleBtn?.textContent.trim()}`);
+    styleBtn?.click();
+    await sleep(120);
+    const afterC = root.getAttribute('data-style');
+    const usableC = usable && shownEl(document.querySelector('.btn-qinci')) && shownEl(document.querySelector('.pr-item'));
+    styleBtn?.click();
+    await sleep(120);
+    chk('style-switch-keeps-actions-usable', afterC === 'c' && usableC && root.getAttribute('data-style') === null,
+      `afterC=${afterC} usable=${usableC} final=${root.getAttribute('data-style')}`);
+    moreBtn?.click();
+    await sleep(120);
+  }
+
   // ── F16 总览（review #61 T2）：点「总览」把待审折按项目摊开，画出谁等谁/谁盖了谁 ──
   // 开→断言→关，别把读折区一直藏着（后面的画可断言要它在）。EXTRA_OPEN 里备了活样本：
   // 两个项目分组、一条「等你拍」、#994 被已画可的 #990 盖成僵尸、#992 needs=#995 的关系条。

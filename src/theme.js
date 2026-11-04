@@ -7,6 +7,29 @@
 // 存法与 readsize.js 同一套：隐私模式下 localStorage 直接抛，getTheme 在模块顶层同步调用，
 // 不兜住就是整站白屏；坏值一律退回默认档。
 
+// ── 主题（同日追加）：书卷 b（默认）/ 克制 a / 墨线 c。与外观正交：三主题 × 浅/深 六套。
+// 同样只管「哪一档」与「挂到 <html>」：差异全在 style.css 的 `html[data-style="a|c"]` 规则里。
+// 默认档 b 不挂属性——基础样式就是书卷，老用户与没跑 JS 的页面都落在它上面。
+export const STYLES = ['b', 'a', 'c'];
+export const DEFAULT_STYLE = 'b';
+const STYLE_KEY = 'zhupi.style';
+
+export const clampStyle = (v) => (STYLES.includes(v) ? v : DEFAULT_STYLE);
+/** 「⋯」里点一下轮换：书卷 → 克制 → 墨线 → 书卷 */
+export const nextStyle = (v) => STYLES[(STYLES.indexOf(clampStyle(v)) + 1) % STYLES.length];
+export const getStyle = () => {
+  try { return clampStyle(localStorage.getItem(STYLE_KEY)); } catch { return DEFAULT_STYLE; }
+};
+export const setStyle = (v) => {
+  try { localStorage.setItem(STYLE_KEY, clampStyle(v)); } catch { /* 存不下就只在本次会话生效 */ }
+};
+export const applyStyle = (v, root = globalThis.document?.documentElement) => {
+  if (!root) return;
+  const s = clampStyle(v);
+  if (s === DEFAULT_STYLE) root.removeAttribute('data-style');
+  else root.setAttribute('data-style', s);
+};
+
 export const THEMES = ['auto', 'light', 'dark'];
 export const DEFAULT_THEME = 'auto';
 

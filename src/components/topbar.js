@@ -12,7 +12,7 @@ import { READ_STEPS, percentOf } from '../readsize.js';
 export function Topbar({
   cur, archived, onHead, busy, draftCount, verifyN = 0, happyUrl, stale, notice, carrying,
   readStep = 1, onReadStep, widthPreset = 'fill', onWidthPreset, moreOpen = false, onMore, onUpdate, updating = false,
-  theme = 'auto', onTheme,
+  theme = 'auto', onTheme, style = 'b', onStyle,
   onRefresh, onCopyRef, onCarry, onZongpi, onSubmit, onQinci,
   nextUp, onNextUp, onNoticeClose,
 }) {
@@ -69,6 +69,8 @@ export function Topbar({
                     <button class="read-size-btn" title=${S.readWidth.title(widthPreset)}
                       onClick=${onWidthPreset}>${S.readWidth.label(widthPreset)}</button>
                   </span>`}
+                ${onStyle && html`<button class="btn-ghost more-item style-btn" title=${S.style.title(style)}
+                  onClick=${onStyle}>${S.style.label(style)}</button>`}
                 ${onTheme && html`<button class="btn-ghost more-item appearance-btn" title=${S.appearance.title(theme)}
                   onClick=${onTheme}>${S.appearance.label(theme)}</button>`}
                 ${onUpdate && html`<button class="btn-ghost more-item more-only update-app"
