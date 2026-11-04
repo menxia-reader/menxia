@@ -14,6 +14,7 @@ import { decorateVerifyMarkers, countVerifyMarkers } from './verify.js';
 import { parseZhupiLink, buildRef, parseDeepLink, buildDeepLink, parseHappySession, resolveRelativeDocLink } from './link.js';
 import { siblingFor, visibleDocs, getLang, setLang, variantOf } from './lang.js';
 import { getReadStep, setReadStep, scaleOf, clampStep } from './readsize.js';
+import { getTheme, setTheme, nextTheme, applyTheme, clampTheme } from './theme.js';
 import { getRailWidth, setRailWidth, clearRailWidth, clampRail, railMax, isResizable, RAIL_MIN, railCeilLending, railLend } from './rail.js';
 import { Setup } from './components/setup.js';
 import { DraftCard, ShownThread, ZongpiCard } from './components/cards.js';
@@ -51,6 +52,10 @@ const AUTO = params.get('auto') === '1';
 // 手机档判定，与 style.css 的 `@media (max-width: 900px)` 同一条线（JS 只在少数行为分叉处读它）
 const isPhone = () => typeof matchMedia === 'function' && matchMedia('(max-width: 900px)').matches;
 const api = DEMO ? demoApi : gh;
+// 外观：模块一加载就把存的档挂到 <html>，别等首帧渲完再切——深色用户会先闪一下白纸。
+// `?theme=light|dark` 只管本次会话（截图 / 冒烟用），不落盘；没带参数就读存的档。
+const THEME_PARAM = params.get('theme');
+applyTheme(THEME_PARAM ?? getTheme());
 
 // 本设备名：用于续读标记里区分「上次在哪台读的」。记在 localStorage，缺省给个短随机名。
 function deviceName() {
@@ -72,7 +77,7 @@ const BUILD_FILES = ['index.html', 'src/style.css', 'src/ui.js', 'src/github.js'
   'src/components/cards.js', 'src/components/setup.js', 'src/components/sidebar.js',
   'src/components/topbar.js', 'src/components/other-threads.js', 'src/components/zongpi-shown.js',
   'src/components/comment-body.js', 'src/components/folder-body.js', 'src/components/thread-view.js',
-  'src/toc.js', 'src/components/outline.js', 'src/track.js', 'src/readsize.js', 'src/rail.js',
+  'src/toc.js', 'src/components/outline.js', 'src/track.js', 'src/readsize.js', 'src/theme.js', 'src/rail.js',
   'src/cols.js',
   'src/slug.js', 'src/components/scroll-ends.js', 'src/components/image-view.js',
   'src/components/dashboard.js', 'src/components/nav-page.js',
@@ -176,13 +181,14 @@ function App() {
   const [verifyCounts, setVerifyCounts] = useState({});
   const [lang, setLangState] = useState(getLang()); // F8：中/EN 偏好，记住上次
   const [readStep, setReadStepState] = useState(getReadStep()); // 正文字号档位，记住上次
+  const [theme, setThemeState] = useState(THEME_PARAM ? clampTheme(THEME_PARAM) : getTheme());   // 外观：跟随系统 / 浅色 / 深色，记住上次
   // 左栏宽度。null = 从没拖过，别管它，让 CSS 的响应式默认说了算（宽窗 300 / 笔记本档 240）。
   const [railW, setRailW] = useState(getRailWidth());
   const probeRef = useRef(null);   // 版心几何探针，见 style.css 的 .geom-probe
   const [stale, setStale] = useState(false);
   const [tab, setTab] = useState('open');        // open=待审 / done=已画可（归档，只读）
   const [qian, setQianState] = useState(params.get('qian') || null); // 「按签」视图选中的签，null=三栏
-  const [dash, setDash] = useState(false);       // F16 总览：按项目摊开待审折，看谁等谁、谁盖了谁
+  const [dash, setDash] = useState(params.get('dash') === '1');   // F16 总览：按项目摊开待审折，看谁等谁、谁盖了谁。?dash=1 直开（截图用）
   // 手机目录页（三层导航的第二层：折清单 → 这里 → 正文）。只有 ≤900 的底栏能把它拨开，
   // 桌面读不到那颗钮，所以这个 state 在宽屏上恒 false；显隐规则也整套关在 ≤900 里，
   // 万一从窄屏拉宽（iPad 转屏），正文照常回来，不会卡在一个桌面上没入口的页面里。
@@ -348,7 +354,8 @@ function App() {
           ? S.deepLink.folderNotFound(dl.prNumber)
           : S.deepLink.noFolderNumber;
       }
-      if (list.length && !R.current.cur) openPR(list[0]); // 在途中用户已手点开折子就别顶掉他
+      // 在途中用户已手点开折子就别顶掉他。demo 带 ?list=1 时停在清单页（手机档截图用）。
+      if (list.length && !R.current.cur && !(DEMO && params.get('list') === '1')) openPR(list[0]);
       flushPending();
       return list;                                        // 画可后要据此算「下一折是谁」
     } catch (err) {
@@ -1731,6 +1738,7 @@ function App() {
           widthPreset=${widthPreset}
           onWidthPreset=${() => { const p = nextWidthPreset(widthPreset); setWidthPresetState(p); setWidthPreset(p); }}
           moreOpen=${moreOpen} onMore=${() => setMoreOpen((o) => !o)}
+          theme=${theme} onTheme=${() => { const t = nextTheme(theme); setThemeState(t); setTheme(t); applyTheme(t); }}
           updating=${updating}
           onUpdate=${() => { setUpdating(true); say(S.stale.updating); hardUpdate([...BUILD_FILES, ...VENDOR_FILES]); }}
           onReadStep=${(i) => { const c = clampStep(i); setReadStepState(c); setReadStep(c); }}

@@ -1,18 +1,30 @@
-/* 门下 —— 宣纸 / 墨 / 朱砂 */
+/* 门下 —— 宣纸 / 墨 / 朱砂
+   B · 宣纸书卷（2026-11-03，outputs/menxia-taste/DIRECTIONS.zh-CN.md）：界面退到纸的后面。
+   三条纪律：字号五档（--t-xs/--t-s/--t-body/--t-h2/--t-h1）、朱砂每屏至多两处（「等你拍」的点
+   与涂归草稿/划句）、mono 只给代码与 sha。整屏只有三种线：纸上的淡横线（--rule）、正文左的
+   一道朱丝栏、眉批前的短竖线。没有药丸、没有卡、静止元素没有阴影（阴影只留浮层）。 */
 :root {
+  color-scheme: light;
   --paper: #F5EFE3;
   --paper-raised: #FBF7EE;
   --ink: #26211A;
-  /* ink-soft / cinnabar 2026-11 各压暗一丝（原 #7A7062 / #C3402B）：小字在宣纸上原为 4.24 / 4.49:1，
-     差一口气够不到 WCAG AA 4.5；现 4.63 / 4.60（raised 上 4.96 / 4.93），肉眼几乎无差。 */
-  --ink-soft: #746A5D;
-  --cinnabar: #C03F2A;
+  /* 次要文字 2026-11-03 由 #7A7062 压深：审计 @390 量到 3.9:1，这个值在纸底上 5.3:1、浮纸上 5.7:1 */
+  --ink-soft: #6A6153;
+  --cinnabar: #C3402B;
   --cinnabar-deep: #9C2F1F;
   --rule: #E4DAC6;
   --veil: rgba(251, 247, 238, .55);   /* 浮在纸上的面板蒙层（侧栏/卡） */
   --hover: rgba(251, 247, 238, .75);  /* 悬停底 */
-  --chip: rgba(228, 218, 198, .40);   /* 行内码、表头、分段控件的底 */
+  --chip: rgba(228, 218, 198, .40);   /* 行内码、分段控件的底 */
   --shadow: rgba(38, 33, 26, .10);
+  /* 深浅两套只在变量上分叉的几处（原先散在 prefers-color-scheme 块里的规则，收成变量
+     是为了让「外观：浅色/深色」的手动档也能用同一份深色定义，见 theme.js）。 */
+  --seal-ring: inset 0 0 0 1.5px rgba(251,247,238,.55), inset 0 0 6px rgba(122,26,13,.5);
+  --hl-draft: rgba(195, 64, 43, .10);          /* 划句草稿的淡底（主要靠朱砂下划线，底只是 Safari 兜底） */
+  --diff-add-bg: rgba(46,125,50,.10);  --diff-add-line: #2e7d32;
+  --diff-del-bg: rgba(200,52,43,.10);  --diff-del-line: #c8342b;
+  /* 字号五档。正文之外的一切都只许从这五个里挑；article 内的仍乘 --read-scale。 */
+  --t-xs: 12.5px; --t-s: 14px; --t-body: 17px; --t-h2: 23px; --t-h1: 34px;
   /* ── 字体栈：**只含拉丁的字体必须排在中文字体之前**（门下 #154）──
      字体栈是逐字符回退的。PingFang 与 Songti SC 都自带完整拉丁字形（实测两者的 cmap
      对 AZaz0189 均 8/8 命中），所以把它们排在最前，后面的拉丁字体永远轮不到——改之前
@@ -91,13 +103,14 @@
 
 html, body, #root { height: 100%; }
 html, body { overflow: hidden; }
+/* 整页 38px 网格线 2026-11-03 去掉（审计 #8）：朱丝栏是一条，不是一张网——见 .stage-main::before */
 body {
   font-family: var(--sans);
   color: var(--ink);
-  background:
-    repeating-linear-gradient(90deg, transparent 0 38px, rgba(195,64,43,.05) 38px 39px),
-    var(--paper);
+  background: var(--paper);
 }
+/* 链接统一朱砂深色（审计 #3：折子说明与批注里曾是浏览器默认蓝）。行内链接按行高排版，不计入触控目标。 */
+#app a, .setup-card a { color: var(--cinnabar-deep); text-underline-offset: .2em; text-decoration-thickness: .06em; }
 
 [hidden] { display: none !important; }
 
@@ -108,19 +121,18 @@ body {
   background: var(--cinnabar); color: var(--paper-raised);
   font-family: var(--songti); font-weight: 900; font-size: 17px;
   border-radius: 5px; transform: rotate(-2.5deg);
-  box-shadow: inset 0 0 0 1.5px rgba(251,247,238,.55), inset 0 0 6px rgba(122,26,13,.5);
+  box-shadow: var(--seal-ring);
 }
-.brand { font-family: var(--songti); font-size: 19px; letter-spacing: .16em; font-weight: 700; }
+.brand { font-family: var(--songti); font-size: 20px; letter-spacing: .2em; font-weight: 700; }
 
 /* ── 设置页 ── */
 #setup { display: flex; align-items: center; justify-content: center; height: 100%; overflow-y: auto; padding: 40px 20px; }
 .setup-card {
   width: 100%; max-width: 560px; padding: 34px 36px 30px;
-  background: var(--paper-raised); border: 1px solid var(--rule); border-radius: 14px;
-  box-shadow: 0 2px 14px var(--shadow);
+  background: var(--paper-raised); border: 1px solid var(--rule); border-radius: 8px;
 }
-.setup-lead { margin: 20px 0 22px; font-size: 15.5px; line-height: 1.8; color: var(--ink-soft); }
-.setup-steps { margin: 0 0 22px 20px; font-size: 14.5px; line-height: 2; }
+.setup-lead { margin: 20px 0 22px; font-size: var(--t-s); line-height: 1.8; color: var(--ink-soft); }
+.setup-steps { margin: 0 0 22px 20px; font-size: var(--t-s); line-height: 2; }
 .setup-steps code { font: 13px var(--mono); background: var(--paper); padding: 2px 6px; border-radius: 4px; }
 .setup-steps a { color: var(--cinnabar-deep); }
 #repo-input, #token-input {
@@ -133,19 +145,20 @@ body {
 .setup-msg { font-size: 13.5px; color: var(--ink-soft); }
 .setup-msg.err { color: var(--cinnabar-deep); }
 
-button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; white-space: nowrap; }
+/* 书卷语言里按钮是「字」不是药丸：宋体、加字距、没有边框与底。
+   .btn-primary 只剩设置页的「进门」与题签行的「提交涂归 · n」——后者是涂归草稿那一族，允许朱砂。 */
 .btn-primary {
-  padding: 11px 26px; border-radius: 999px;
-  background: var(--cinnabar); color: var(--paper-raised);
-  font-family: var(--songti); font-weight: 700; font-size: 15px; letter-spacing: .2em; text-indent: .2em;
-  box-shadow: 0 2px 6px rgba(156,47,31,.35), inset 0 1px 0 rgba(251,247,238,.25);
+  padding: 6px 0; border-radius: 0; background: none; color: var(--cinnabar-deep);
+  font-family: var(--songti); font-weight: 700; font-size: var(--t-s); letter-spacing: .14em;
 }
-.btn-primary:hover { background: var(--cinnabar-deep); }
+.btn-primary:hover { color: var(--cinnabar); }
 .btn-ghost {
-  padding: 7px 16px; border-radius: 999px; border: 1.5px solid var(--rule);
-  background: var(--paper-raised); font-size: 13.5px;
+  padding: 6px 0; border-radius: 0; border: 0; background: none;
+  font-family: var(--songti); font-size: var(--t-s); letter-spacing: .14em; color: var(--ink);
 }
-.btn-ghost:hover { border-color: var(--ink-soft); }
+.btn-ghost:hover { color: var(--cinnabar-deep); }
+.btn-ghost:disabled { color: var(--ink-soft); cursor: default; }
 
 /* ── 主界面骨架：侧栏与顶栏钉死，只有 .work 滚 ── */
 #app { display: flex; height: 100%; }
@@ -229,9 +242,9 @@ aside {
   pointer-events: none; visibility: hidden;
 }
 aside .brand-row { padding: 0 6px 22px; }
-.sec-label { font-family: var(--songti); font-size: 13.5px; letter-spacing: .1em; color: var(--ink-soft); padding: 0 6px 10px; }
+.sec-label { font-family: var(--songti); font-size: var(--t-s); letter-spacing: .1em; color: var(--ink-soft); padding: 0 6px 10px; }
 #pr-list { flex: 1; overflow-y: auto; }
-.settings { margin-top: 16px; padding: 6px; font-size: 13px; color: var(--ink-soft); text-align: left; }
+.settings { margin-top: 16px; padding: 6px; font-size: var(--t-xs); color: var(--ink-soft); text-align: left; }
 .settings:hover { color: var(--ink); }
 
 /* 读毕书架（2026-09-21 由弘文馆改）：架上是已画可的读物。**整块都是安静的**——灰、细。
@@ -241,68 +254,92 @@ aside .brand-row { padding: 0 6px 22px; }
    固定入口，但仍不进「待审 n」的计数、卡也仍压着透明度，不与待审争注意力。
    例外是「未画可」那一组：弘文馆遗留的 open 闲折，还没看过——分组标题与角标要能一眼认出，
    所以不压透明度、角标走墨色实边；但仍不用朱砂，它不催办。 */
-.shelf-hint { font-size: 12px; color: var(--ink-soft); padding: 2px 6px 8px; margin: 0; }
-.shelf-group { font-family: var(--songti); font-size: 12.5px; letter-spacing: .08em; color: var(--ink-soft); padding: 8px 6px 4px; margin: 0; }
+.shelf-hint { font-size: var(--t-xs); color: var(--ink-soft); opacity: .75; padding: 2px 0 8px; margin: 0; }
+.shelf-group { font-family: var(--songti); font-size: var(--t-xs); letter-spacing: .08em; color: var(--ink-soft); padding: 8px 0 4px; margin: 0; }
 .shelf-group-unread { color: var(--ink); }
-.shelf-group + .shelf-group, .pr-item + .shelf-group { margin-top: 10px; border-top: 1px solid var(--rule); padding-top: 12px; }
+.shelf-group + .shelf-group, .pr-item + .shelf-group { margin-top: 10px; padding-top: 12px; }
 .shelf-list .pr-item { opacity: .82; }
 .shelf-list .pr-item:hover, .shelf-list .pr-item.active, .shelf-list .pr-item.pr-unread { opacity: 1; }
-.unread-chip {
-  margin-left: 8px; padding: 1px 7px; border-radius: 999px;
-  border: 1px solid var(--ink-soft); font-size: 11.5px; color: var(--ink);
-}
-.kind-chip {
-  margin-left: 8px; padding: 1px 7px; border-radius: 999px;
-  border: 1px solid var(--rule); font-size: 11.5px; color: var(--ink-soft);
-}
-/* 签 chip（卡面 meta 上，三栏共用）：比 kind-chip 再淡一档，多个并排不喧宾夺主。 */
-.qian-chip {
-  margin-left: 6px; padding: 1px 7px; border-radius: 999px;
-  border: 1px solid var(--rule); font-size: 11px; color: var(--ink-soft); opacity: .85;
-}
+/* 清单上的小签：不再是药丸，只是 meta 行里的一个词，用「·」隔开 */
+.unread-chip, .kind-chip, .qian-chip { margin-left: 6px; font-size: var(--t-xs); color: var(--ink-soft); }
+.unread-chip { color: var(--ink); }
+.unread-chip::before, .kind-chip::before, .qian-chip::before { content: "· "; color: var(--ink-soft); }
 
+/* 折目：不是卡，是目录。宋体标题、折号小字在上、条目之间一条极淡横线；当前折左缘一道 2px 墨线
+   （画在 aside 的左边框外侧，left 取负的 aside 内边距）。朱砂只给「等你拍」的一个 6px 点。 */
+/* #pr-list 是滚动容器（overflow-y:auto 连带 overflow-x 也成 auto），画在条目左外侧的墨线会被
+   裁掉——把容器向左扩出 aside 的内边距再用 padding 补回来，线就落在容器之内。≤900 的 aside
+   内边距是 14，那一档同步改（见手机外壳块）。 */
+#pr-list { margin-left: -18px; padding-left: 18px; }
 .pr-item {
-  display: block; width: 100%; text-align: left; position: relative;
-  padding: 14px 14px 12px 18px; border-radius: 9px; margin-bottom: 10px;
-  border: 1px solid transparent;
+  display: flex; flex-direction: column; width: 100%; text-align: left; position: relative;
+  padding: 13px 0 12px; border-radius: 0; margin: 0;
+  border: 0; border-bottom: 1px solid var(--rule); white-space: normal;
 }
-.pr-item:hover { background: var(--hover); }
-.pr-item.active { background: var(--paper-raised); border-color: var(--rule); box-shadow: 0 1px 3px var(--shadow); }
+.pr-item:hover h3 { color: var(--cinnabar-deep); }
 .pr-item.active::before {
-  content: ""; position: absolute; left: -1px; top: 10px; bottom: 10px;
-  width: 3.5px; background: var(--cinnabar); border-radius: 2px;
+  content: ""; position: absolute; left: -18px; top: 14px; bottom: 12px;
+  width: 2px; background: var(--ink);
 }
-.pr-item h3 { font-family: var(--songti); font-size: 15.5px; font-weight: 700; line-height: 1.45; text-wrap: balance; }
-.pr-item .meta { margin-top: 5px; font-size: 12.5px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+/* 折号小字在上、宋体标题在下、摘要在后（DOM 顺序不动，flex order 排） */
+.pr-item h3 { order: 2; margin-top: 2px; font-family: var(--songti); font-size: 16px; font-weight: 400; line-height: 1.5; text-wrap: balance; }
+.pr-item.active h3 { font-weight: 700; }
+.pr-item .meta { order: 1; margin-top: 0; font-size: var(--t-xs); color: var(--ink-soft); font-variant-numeric: tabular-nums; line-height: 1.6; }
+.pr-item .pr-summary { order: 3; }
 /* 清单摘要（F1）：TLDR gist 两行截断 + 拍板角标。常态压得住，别把扫读的清单撑成读物。 */
-.pr-summary { margin-top: 6px; }
+.pr-summary { margin-top: 3px; }
 .pr-tldr {
-  font-size: 12.5px; line-height: 1.5; color: var(--ink-soft);
+  font-size: var(--t-xs); line-height: 1.55; color: var(--ink-soft);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
+/* 「待你拍板 · n 条」退成墨色小字 + 一个朱砂点（审计 #6：每张卡一枚红底红字等于没有强调） */
 .pr-decisions {
-  display: inline-block; margin-top: 5px; padding: 1px 7px; border-radius: 6px;
-  font-family: var(--songti); font-size: 11.5px; letter-spacing: .04em;
-  color: var(--cinnabar-deep); background: rgba(195,64,43,.08); border: 1px solid var(--rule);
+  display: inline-flex; align-items: center; gap: 5px; margin-top: 4px;
+  font-size: var(--t-xs); color: var(--ink); letter-spacing: .02em;
 }
+.pr-decisions::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--cinnabar); flex: none; }
 
 main { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; }
+/* 题签行（B：没有顶栏）。左右留白与 .work 同一条式子，所以它与版心对齐、随版心居中；
+   面包屑再缩进 --art-indent 对齐正文列。仍钉在 .work 之上不随正文滚——判 / 画可 得一直按得着。 */
 .mainbar {
-  flex: none; display: flex; align-items: center; justify-content: space-between;
-  padding: 18px 36px 14px; border-bottom: 1px solid var(--rule);
+  flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 26px var(--work-pad) 14px;
+  padding-inline: max(var(--work-pad), calc((100% - var(--stage)) / 2));
+  border-bottom: 1px solid var(--rule);
 }
-.crumb { font-size: 13.5px; color: var(--ink-soft); }
-.crumb b { font-family: var(--songti); color: var(--ink); }
+.crumb {
+  font-family: var(--songti); font-size: var(--t-s); color: var(--ink-soft); letter-spacing: .08em;
+  margin-left: calc(var(--chap-slot) + var(--art-indent)); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.crumb b { color: var(--ink); font-weight: 700; }
 /* 折号：agent 在会话里一律用「#66」指代这折，正文里却只有标题——读者对不上号（2026-08-02 反馈）。
-   等宽字体让数字好认，弱于标题但强于面包屑底色，扫一眼就能确认「我在读的就是它说的那折」。 */
-.crumb-no { font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace); color: var(--ink); opacity: .75; }
-.actions { display: flex; align-items: center; gap: 12px; }
+   2026-11-03 由 mono 改回正文字 + tabular-nums（审计 #7：mono 只给代码）。 */
+.crumb-no { font-family: var(--sans); font-variant-numeric: tabular-nums; color: var(--ink); letter-spacing: 0; }
+.actions { display: flex; align-items: center; gap: 18px; flex: none; position: relative; }
+
+/* 「⋯」菜单：所有断点一致。.more-item 默认藏，题签行带 .more-open 时在一张纸色小面板里摊开。
+   面板是浮层，允许阴影。裸 display 写在这里、媒体查询之前（层叠守卫的口径）。 */
+.more-item, .actions .more-item { display: none; }   /* 两段选择器压过后文的 .read-size{display:inline-flex} */
+.more-only { display: none; }
+.more-btn { display: inline-flex; align-items: center; justify-content: center; font-size: 18px; letter-spacing: 0; padding: 4px 6px; }
+.more-menu {
+  display: none; position: absolute; right: 0; top: calc(100% + 10px); z-index: 40;
+  flex-direction: column; align-items: stretch; min-width: 200px; padding: 8px 0;
+  background: var(--paper-raised); border: 1px solid var(--rule);
+  box-shadow: 0 6px 22px var(--shadow);
+}
+.mainbar.more-open .more-menu { display: flex; }
+.mainbar.more-open .more-item { display: inline-flex; align-items: center; }
+.more-menu .btn-ghost { justify-content: flex-start; text-align: left; padding: 9px 18px; letter-spacing: .1em; }
+.more-menu .read-size { padding: 4px 12px; }
 
 .notice {
   flex: none;
-  margin: 14px 36px 0; padding: 9px 14px; font-size: 13.5px;
-  background: rgba(195,64,43,.08); border: 1px solid var(--rule); border-radius: 8px;
-  color: var(--cinnabar-deep);
+  margin: 14px var(--work-pad) 0; padding: 9px 14px; font-size: var(--t-s);
+  background: var(--paper-raised); border: 1px solid var(--rule); border-left: 2px solid var(--ink-soft);
+  color: var(--ink);
 }
 /* 画可后的落地条：折不跳，下一折做成他自己踩的踏板 */
 .notice-next { margin-left: 12px; padding: 3px 12px; font-size: 13px; vertical-align: baseline; }
@@ -322,40 +359,43 @@ main { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: colum
    align-items: flex-start 是 sticky 生效的前提——拉伸满高就没有滑动余量了。 */
 .stage-row { display: flex; gap: var(--col-gap); align-items: flex-start; }
 .stage-main { flex: none; width: var(--main-w); min-width: 0; position: relative; }
+/* 朱丝栏：一条，在正文那一摞的左缘，从折子说明一直画到正文底。这是整站唯一的装饰性红线。 */
+.stage-main::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 1px;
+  background: var(--cinnabar); opacity: .55; pointer-events: none;
+}
 .read-row { display: flex; gap: var(--col-gap); align-items: flex-start; }
 article { flex: none; width: var(--art-w); margin-left: var(--art-indent); min-width: 0; }
 
-.doc-tabs { display: flex; gap: 8px; margin: 0 0 22px var(--art-indent); flex-wrap: wrap; }
+/* 篇切换：一行文字，当前篇墨色下划线（mock-B 的 .ctl） */
+.doc-tabs { display: flex; gap: 16px; margin: 0 0 18px var(--art-indent); flex-wrap: wrap; }
 .doc-tab {
-  padding: 6px 14px; border-radius: 999px; border: 1px solid var(--rule);
-  background: var(--paper-raised); font: 13px var(--mono); color: var(--ink-soft);
+  padding: 2px 0; border-radius: 0; border: 0; background: none;
+  font-size: var(--t-s); color: var(--ink-soft); font-variant-numeric: tabular-nums;
 }
 .doc-tab:hover { color: var(--ink); }
-.doc-tab.active { border-color: var(--ink-soft); color: var(--ink); }
+.doc-tab.active { color: var(--ink); text-decoration: underline; text-underline-offset: .35em; text-decoration-color: var(--ink-soft); }
 
 /* ── 通读开关（连续读整本，PAIN #31②）── */
 /* M2 离线包提示条：只在离线/待发/续读时出现，默认不占位 */
 .offline-bar {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  margin: 0 0 14px var(--art-indent); padding: 6px 14px; border-radius: 8px;
-  font: 12px var(--mono); color: var(--ink-soft); background: var(--paper-raised);
-  border: 1px solid var(--rule);
+  margin: 0 0 14px var(--art-indent); padding: 6px 0;
+  font-size: var(--t-xs); color: var(--ink-soft); border-bottom: 1px solid var(--rule);
 }
 .offline-outbox, .offline-copy { color: var(--ink-soft); }
 .offline-jump-go, .offline-jump-no {
-  padding: 4px 12px; border-radius: 999px; border: 1.5px solid var(--rule);
-  background: var(--paper); font: 12px var(--mono); color: var(--ink); cursor: pointer;
+  padding: 2px 0; font-family: var(--songti); font-size: var(--t-xs); letter-spacing: .1em; color: var(--ink); cursor: pointer;
 }
-.offline-jump-no { color: var(--ink-soft); border-color: transparent; }
+.offline-jump-no { color: var(--ink-soft); }
 
 .read-through-bar { display: flex; align-items: center; gap: 12px; margin: 0 0 18px var(--art-indent); flex-wrap: wrap; }
 .read-through-toggle {
-  padding: 6px 16px; border-radius: 999px; border: 1.5px solid var(--rule);
-  background: var(--paper-raised); font: 13px var(--mono); color: var(--ink-soft); cursor: pointer;
+  padding: 2px 0; font-size: var(--t-s); color: var(--ink-soft); cursor: pointer;
 }
 .read-through-toggle:hover { color: var(--ink); }
-.read-through-toggle.on { background: var(--cinnabar); border-color: var(--cinnabar); color: var(--paper-raised); }
-.read-through-hint { font-size: 12.5px; color: var(--ink-soft); }
+.read-through-toggle.on { color: var(--ink); text-decoration: underline; text-underline-offset: .35em; text-decoration-color: var(--ink-soft); }
+.read-through-hint { font-size: var(--t-xs); color: var(--ink-soft); }
 
 /* ── 文档渲染排版 ──
    每个 font-size 都乘 --read-scale（顶栏 A⁻/A⁺ 调，默认 1 = 原样）。写成 calc 而不是
@@ -363,13 +403,14 @@ article { flex: none; width: var(--art-w); margin-left: var(--art-indent); min-w
    换算成 em 会引入一堆 1.212em 这种读不懂的数，且改任一处都要重算别处。
    行高全是无单位倍数，自动跟着字号走，不用管。
    ⚠️ 新增带 font-size 的 article 规则记得一起乘，漏了就是「放大后这一块不跟着动」。 */
-article h1 { font-family: var(--songti); font-size: calc(27px * var(--read-scale)); line-height: 1.4; margin-bottom: 4px; text-wrap: balance; }
-article h2 { font-family: var(--songti); font-size: calc(20px * var(--read-scale)); margin: 30px 0 12px; text-wrap: balance; }
-article h3 { font-family: var(--songti); font-size: calc(17px * var(--read-scale)); margin: 24px 0 10px; text-wrap: balance; }
+article h1 { font-family: var(--songti); font-size: calc(var(--t-h1) * var(--read-scale)); line-height: 1.3; letter-spacing: .02em; margin-bottom: 8px; text-wrap: balance; }
+article h2 { font-family: var(--songti); font-size: calc(var(--t-h2) * var(--read-scale)); line-height: 1.4; margin: 40px 0 14px; text-wrap: balance; }
+article h3 { font-family: var(--songti); font-size: calc(var(--t-body) * var(--read-scale)); margin: 28px 0 10px; text-wrap: balance; }
 /* 标题用 balance（拉平各行）、正文用 pretty（只治段末孤字）。别对调：Chromium 只对
-   ≤6 行的块做 balance，长段落用它是空转；WebKit 不设上限但 pretty 才是长文该用的。 */
-article p { font-size: calc(16.5px * var(--read-scale)); line-height: 1.9; margin-bottom: 15px; text-wrap: pretty; }
-article ul, article ol { margin: 0 0 15px 22px; font-size: calc(16.5px * var(--read-scale)); line-height: 1.9; }
+   ≤6 行的块做 balance，长段落用它是空转；WebKit 不设上限但 pretty 才是长文该用的。
+   正文 17px / 1.95（B：可读性只升不降）。 */
+article p { font-size: calc(var(--t-body) * var(--read-scale)); line-height: 1.95; margin-bottom: 16px; text-wrap: pretty; }
+article ul, article ol { margin: 0 0 16px 22px; font-size: calc(var(--t-body) * var(--read-scale)); line-height: 1.95; }
 article li { margin-bottom: 4px; }
 article a { color: var(--cinnabar-deep); }
 article hr { border: 0; border-top: 1px solid var(--rule); margin: 24px 0; }
@@ -387,10 +428,10 @@ article blockquote {
   border-left: 3px solid var(--rule); padding-left: 14px; margin: 0 0 15px;
   color: var(--ink-soft);
 }
-article code { font: 14px var(--mono); font-size: calc(14px * var(--read-scale)); background: var(--chip); padding: 2px 6px; border-radius: 4px; }
+article code { font: 14px var(--mono); font-size: calc(14px * var(--read-scale)); background: var(--chip); padding: 2px 6px; border-radius: 3px; }
 article pre {
-  background: var(--paper-raised); border: 1px solid var(--rule); border-radius: 9px;
-  padding: 14px 16px; overflow-x: auto; margin-bottom: 16px;
+  background: var(--paper-raised); border: 0; border-left: 2px solid var(--rule); border-radius: 0;
+  padding: 12px 16px; overflow-x: auto; margin-bottom: 18px;
 }
 article pre code { background: none; padding: 0; font-size: calc(13px * var(--read-scale)); line-height: 1.7; }
 
@@ -398,33 +439,41 @@ article pre code { background: none; padding: 0; font-size: calc(13px * var(--re
    色取克制版——绿/红只做背景微染，不是荧光高亮，仍是宣纸墨字的底子。 */
 .diff-block code { display: block; }
 .diff-line { display: block; margin: 0 -16px; padding: 0 16px 0 13px; border-left: 3px solid transparent; white-space: pre-wrap; }
-.diff-add { background: rgba(46,125,50,.10); border-left-color: #2e7d32; }
-.diff-del { background: rgba(200,52,43,.10); border-left-color: #c8342b; }
+.diff-add { background: var(--diff-add-bg); border-left-color: var(--diff-add-line); }
+.diff-del { background: var(--diff-del-bg); border-left-color: var(--diff-del-line); }
 .diff-hunk { color: var(--ink-soft); background: var(--chip); }
 .diff-ctx { color: var(--ink); }
-article table { border-collapse: collapse; width: 100%; margin: 6px 0 18px; font-size: calc(14.5px * var(--read-scale)); }
+/* 表格只有横线（审计 #11）：表头宋体加一道墨线，表身每行一条淡线，不画竖线不上底色 */
+article table { border-collapse: collapse; width: 100%; margin: 8px 0 22px; font-size: calc(15px * var(--read-scale)); }
 /* tabular-nums 只加在「需要竖向对齐」的地方（表格、折清单的折号），不往 :root 加——
    正文散文里的数字用比例字形更自然，`2026` 在句中不该被撑开。 */
-article th, article td { border: 1px solid var(--rule); padding: 9px 12px; text-align: left; line-height: 1.6; font-variant-numeric: tabular-nums; }
-article th { font-family: var(--songti); background: var(--chip); font-weight: 700; }
+article th, article td { border: 0; border-bottom: 1px solid var(--rule); padding: 8px 6px; text-align: left; line-height: 1.6; font-variant-numeric: tabular-nums; }
+article th { font-family: var(--songti); font-weight: 700; font-size: calc(var(--t-s) * var(--read-scale)); padding: 6px 6px 8px; border-bottom: 1.5px solid var(--ink); }
 /* cursor: zoom-in 是这个功能唯一的自发现入口——图能点开这件事没有别的地方写着 */
-article img { max-width: 100%; border: 1px solid var(--rule); border-radius: 9px; cursor: zoom-in; }
+article img { max-width: 100%; border: 0; border-radius: 0; cursor: zoom-in; }
 article figure.mermaid-fig { margin: 1em 0; }   /* mermaid 围栏渲出的图（src/mermaid.js）；img 沿用上面的规则，可点开放大 */
 article figure.mermaid-fig > details.mermaid-src > summary { color: var(--ink-soft); font-size: 13px; cursor: pointer; }   /* 折叠的图源码：锚定/划选用（review M1） */
 article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎报能放大（见 image-view.js） */
 
-.state { color: var(--ink-soft); font-size: 15px; padding: 8px 0; }
+.state { color: var(--ink-soft); font-size: var(--t-s); padding: 8px 0; }
 .state.err { color: var(--cinnabar-deep); }
 
-/* ── M2 涂归 ── */
-::highlight(zhupi-draft) { background-color: rgba(195, 64, 43, .16); }
+/* ── M2 涂归 ──
+   划句草稿改朱砂下划线（B），不再是色块。::highlight 里的 text-decoration Chrome 支持、
+   Safari 未逐版核实，所以留一层极淡的底色兜底：下划线不出来时至少还看得见划了哪句。 */
+::highlight(zhupi-draft) {
+  background-color: var(--hl-draft);
+  text-decoration: underline; text-decoration-color: var(--cinnabar);
+  text-decoration-thickness: 1.5px; text-underline-offset: .22em;
+}
 
+/* 浮批钮是浮层（随划句出现），阴影留着；去掉的是 inset 高光那一道「按钮光泽」 */
 .zhupi-float {
   position: fixed; z-index: 30;
-  padding: 7px 16px; border-radius: 999px;
+  padding: 7px 16px; border-radius: 3px;
   background: var(--cinnabar); color: var(--paper-raised);
-  font-family: var(--songti); font-weight: 700; font-size: 13.5px; letter-spacing: .1em;
-  box-shadow: 0 3px 10px rgba(156, 47, 31, .4), inset 0 1px 0 rgba(251, 247, 238, .25);
+  font-family: var(--songti); font-weight: 700; font-size: var(--t-s); letter-spacing: .1em;
+  box-shadow: 0 3px 10px rgba(156, 47, 31, .3);
 }
 .zhupi-float:hover { background: var(--cinnabar-deep); }
 
@@ -448,13 +497,13 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
   left: calc(var(--rail-w) + 4px); top: 50%; transform: translateY(-50%);
   display: flex; flex-direction: column; gap: 6px;
 }
+/* 审计 #14：原先是唯一带阴影的常驻元素。改成无边无底的灰箭头，hover 才上墨。 */
 .scroll-end {
-  width: 32px; height: 32px; border-radius: 8px;
-  border: 1px solid var(--rule); background: var(--paper-raised);
-  color: var(--ink-soft); font-size: 15px; line-height: 1;
-  box-shadow: 0 2px 8px var(--shadow);
+  width: 28px; height: 28px; border-radius: 0;
+  border: 0; background: none;
+  color: var(--ink-soft); font-size: var(--t-s); line-height: 1; opacity: .7;
 }
-.scroll-end:hover { color: var(--cinnabar); border-color: var(--cinnabar); }
+.scroll-end:hover { color: var(--ink); opacity: 1; }
 /* 手机壳：左栏挪到顶上，正文从 16px 起，**左边一丝空档都没有**——贴左缘就直接压在
    每行的头一个字上（实测箭头占 6–38，正文左缘 16）。改贴右缘：中文正文左对齐，
    行尾是参差的，压在右边挡住的字远少于压在行首。scroll-ends.js 的 place() 认出这一档后
@@ -465,15 +514,16 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
 
 .margin-col { position: relative; width: var(--marg-w); flex: none; }
 
+/* 眉批不装盒（B）：朱砂短竖线 + 宋体小字；引线是一条极淡墨线。草稿朱砂、已呈墨色（见 .anno-shown）。 */
 .anno-card {
   position: absolute; left: 0; width: 100%;
-  background: var(--paper-raised); border: 1px solid var(--rule); border-radius: 10px;
-  padding: 13px 14px; box-shadow: 0 2px 8px var(--shadow);
+  background: none; border: 0; border-left: 2px solid var(--cinnabar); border-radius: 0;
+  padding: 2px 0 2px 14px; box-shadow: none;
 }
 .anno-card::before {
-  content: ""; position: absolute; top: 24px; height: 2px;
+  content: ""; position: absolute; top: 14px; height: 1px;
   left: calc(-1 * var(--col-gap)); width: var(--col-gap);
-  background: var(--cinnabar); opacity: .5;
+  background: var(--ink); opacity: .22;
 }
 .zongpi-card::before { display: none; }
 
@@ -489,66 +539,53 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
      ③ 朱砂描边 —— 与普通卡的 `--rule` 灰边一眼分得开，知道这张是「我正在写的」。 */
 .zongpi-card {
   position: fixed; top: 50%; transform: translateY(-50%);
-  z-index: 26; margin: 0;
-  border-color: var(--cinnabar);
-  box-shadow: 0 6px 24px rgba(38, 33, 26, .22);
+  z-index: 26; margin: 0; padding: 14px 16px;
+  background: var(--paper-raised); border: 1px solid var(--rule); border-left: 2px solid var(--cinnabar);
+  box-shadow: 0 6px 24px var(--shadow);
 }
 /* 眉批卡跟着 --read-scale 走，但**只放大要读的字**：引文、批注正文、输入框。
    .anno-src 这类「谁·什么时候」的元信息标签不动——它们是标签不是读物，跟着涨只会
    把 300px 定宽卡撑得更高，把引线拉得更容易与正文错开。栏宽本身也不动，所以放大的
    代价是卡变高、每行字数变少，这是这一档定宽栏能给的全部余量。 */
-.anno-quote {
-  border-left: 3px solid var(--cinnabar); padding: 2px 2px 2px 10px;
-  font-family: var(--songti); font-size: calc(13.5px * var(--read-scale)); line-height: 1.6; margin-bottom: 6px;
+/* 引文：宋体小字、灰、带「」；不再画左色条（卡自己的左缘竖线已经说明了草稿/已呈） */
+.anno-quote, .anno-quote-shown {
+  border: 0; padding: 0;
+  font-family: var(--songti); font-size: calc(var(--t-xs) * var(--read-scale)); line-height: 1.6; margin-bottom: 4px;
+  color: var(--ink-soft);
 }
-.anno-src { font-size: 12px; color: var(--ink-soft); margin-bottom: 8px; }
-.anno-note { font-size: calc(13.5px * var(--read-scale)); line-height: 1.65; cursor: pointer; }
+.anno-quote::before, .anno-quote-shown::before { content: "「"; }
+.anno-quote::after, .anno-quote-shown::after { content: "」"; }
+.anno-src { font-size: var(--t-xs); color: var(--ink-soft); margin-bottom: 4px; }
+.anno-note { font-family: var(--songti); font-size: calc(var(--t-s) * var(--read-scale)); line-height: 1.7; cursor: pointer; }
 /* 空草稿的占位：压暗+斜体，一眼看出「这条还没写」，但仍是个能点的实体靶子（见 cards.js） */
 .anno-note-empty { color: var(--ink-soft); font-style: italic; }
+/* 草稿输入框只有一条底线 */
 .anno-input {
-  width: 100%; min-height: 64px; padding: 10px 12px; resize: vertical;
-  font: 13.5px/1.65 var(--sans); font-size: calc(13.5px * var(--read-scale)); color: var(--ink);
-  background: var(--paper); border: 1px solid var(--rule); border-radius: 8px; outline: none;
+  width: 100%; min-height: 60px; padding: 4px 0; resize: vertical;
+  font: 14px/1.7 var(--songti); font-size: calc(var(--t-s) * var(--read-scale)); color: var(--ink);
+  background: transparent; border: 0; border-bottom: 1px solid var(--rule); border-radius: 0; outline: none;
 }
-.anno-input:focus { border-color: var(--cinnabar); }
-.anno-row { display: flex; gap: 10px; margin-top: 10px; justify-content: flex-end; }
-.anno-ghost {
-  padding: 7px 16px; border-radius: 999px; border: 1.5px solid var(--rule);
-  color: var(--ink-soft); font-family: var(--songti); font-size: 13px; letter-spacing: .15em; text-indent: .15em;
+.anno-input:focus { border-bottom-color: var(--cinnabar); }
+.anno-row { display: flex; gap: 16px; margin-top: 8px; justify-content: flex-start; }
+.anno-ghost, .anno-save {
+  padding: 4px 0; border: 0; border-radius: 0; background: none; box-shadow: none;
+  font-family: var(--songti); font-size: var(--t-xs); letter-spacing: .12em;
 }
-.anno-ghost:hover { color: var(--ink); border-color: var(--ink-soft); }
-.anno-save {
-  padding: 7px 20px; border-radius: 999px;
-  background: var(--cinnabar); color: var(--paper-raised);
-  font-family: var(--songti); font-weight: 700; font-size: 13px; letter-spacing: .15em; text-indent: .15em;
-  box-shadow: 0 2px 6px rgba(156, 47, 31, .35);
-}
-.anno-save:hover { background: var(--cinnabar-deep); }
-.margin-note { position: absolute; bottom: -8px; font-size: 12px; color: var(--ink-soft); }
-.btn-submit { font-size: 13.5px; padding: 8px 18px; letter-spacing: .05em; }
+.anno-ghost { color: var(--ink-soft); }
+.anno-ghost:hover { color: var(--ink); }
+.anno-save { color: var(--cinnabar-deep); font-weight: 700; }
+.anno-save:hover { color: var(--cinnabar); }
+.margin-note { position: absolute; bottom: -8px; font-size: var(--t-xs); color: var(--ink-soft); }
 .btn-submit:disabled { opacity: .6; cursor: not-allowed; }
 
 /* ── M3：已呈批注串（墨色安静系；朱砂只留给草稿）── */
-.anno-shown {
-  background: var(--veil);
-  border-color: var(--rule);
-  box-shadow: 0 1px 4px rgba(38, 33, 26, .05);
-}
-.anno-shown::before { background: var(--ink-soft); opacity: .35; } /* 连接线用墨不用朱 */
-.anno-quote-shown {
-  border-left: 3px solid var(--ink-soft); padding: 2px 2px 2px 10px;
-  font-family: var(--songti); font-size: calc(13px * var(--read-scale)); line-height: 1.6; margin-bottom: 6px;
-  color: var(--ink-soft);
-}
-.anno-who { font-weight: 600; color: var(--ink); }
-.anno-outdated {
-  margin-left: 8px; padding: 0 6px; border-radius: 4px; font-size: 11px;
-  border: 1px solid var(--rule); color: var(--ink-soft);
-}
+.anno-shown { border-left-color: var(--ink-soft); }
+.anno-who { font-weight: 700; color: var(--ink); margin-right: 6px; }
+.anno-outdated { margin-left: 6px; font-size: var(--t-xs); color: var(--ink-soft); }
 .anno-path { margin-left: 8px; font: 11px var(--mono); color: var(--ink-soft); }
 /* 批注/回话正文走 markdown 渲染（agent 的回话天然是 markdown），所以撤掉 pre-wrap：
    渲染后换行由块级元素负责，留着 pre-wrap 会让每个 <p> 之间再多出一段空白。 */
-.anno-shown-body { font-size: calc(13px * var(--read-scale)); line-height: 1.65; color: var(--ink); }
+.anno-shown-body { font-size: calc(var(--t-s) * var(--read-scale)); line-height: 1.65; color: var(--ink); }
 .anno-shown-body > :first-child { margin-top: 0; }
 .anno-shown-body > :last-child { margin-bottom: 0; }
 .anno-shown-body p { margin: 0 0 6px; }
@@ -562,23 +599,23 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
 .anno-shown-body blockquote {
   margin: 0 0 6px; padding-left: 9px; border-left: 2px solid var(--rule); color: var(--ink-soft);
 }
-.anno-shown-body table { border-collapse: collapse; margin: 0 0 6px; font-size: 12px; }
-.anno-shown-body th, .anno-shown-body td { border: 1px solid var(--rule); padding: 3px 6px; }
+.anno-shown-body table { border-collapse: collapse; margin: 0 0 6px; font-size: var(--t-xs); }
+.anno-shown-body th, .anno-shown-body td { border: 0; border-bottom: 1px solid var(--rule); padding: 3px 6px; text-align: left; }
+.anno-shown-body th { font-family: var(--songti); border-bottom: 1.5px solid var(--ink); }
 .anno-reply {
-  margin-top: 9px; padding-left: 11px; border-left: 2px solid var(--rule);
+  margin-top: 8px; padding-left: 10px; border-left: 1px solid var(--rule); font-size: var(--t-xs);
 }
-.anno-reply-who { font-size: 11.5px; color: var(--ink-soft); margin-bottom: 3px; }
+.anno-reply-who { font-size: var(--t-xs); color: var(--ink-soft); margin-bottom: 2px; }
 
 /* 展读钮：串卡头一行的右端。只给 .anno-src-row 开 flex，不动裸 .anno-src——
    草稿卡与「其他 N 串」也用那个类，改基类等于替它们改版式。
    常显不做悬停才出：这一行本来只有一个用户名，右边全是空的，藏起来只会让人找不到。 */
 .anno-src-row { display: flex; align-items: center; }
 .anno-expand {
-  margin-left: auto; flex: none; white-space: nowrap;
-  padding: 1px 8px; border: 1px solid var(--rule); border-radius: 999px;
-  font-family: var(--songti); font-size: 11px; letter-spacing: .08em; color: var(--ink-soft);
+  margin-left: auto; flex: none; white-space: nowrap; padding: 0;
+  font-family: var(--songti); font-size: var(--t-xs); letter-spacing: .08em; color: var(--ink-soft);
 }
-.anno-expand:hover { color: var(--cinnabar-deep); border-color: var(--cinnabar); }
+.anno-expand:hover { color: var(--cinnabar-deep); }
 
 /* ── 展读浮窗（为什么不是「加宽眉批栏」见 components/thread-view.js 顶部）──
    z-index 50：压住浮批钮(30)，让位携卷兜底(1000)。 */
@@ -658,41 +695,39 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
 .thread-view-reply .anno-reply-who { font-size: 12.5px; margin-bottom: 7px; }
 
 /* ── M3：rev 版本切换 ── */
-.rev-row { display: flex; align-items: center; gap: 10px; margin: 0 0 18px var(--art-indent); flex-wrap: wrap; }
-.rev-label { font-family: var(--songti); font-size: 12.5px; color: var(--ink-soft); letter-spacing: .08em; }
-.rev-switch { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.rev-row { display: flex; align-items: center; gap: 14px; margin: 0 0 18px var(--art-indent); flex-wrap: wrap; }
+.rev-label { font-family: var(--songti); font-size: var(--t-xs); color: var(--ink-soft); letter-spacing: .08em; }
+.rev-switch { display: inline-flex; gap: 14px; flex-wrap: wrap; }
 .rev-opt {
-  padding: 5px 12px; border-radius: 999px; border: 1px solid var(--rule);
-  background: var(--paper-raised); font: 12px var(--mono); color: var(--ink-soft);
+  padding: 2px 0; font-size: var(--t-s); color: var(--ink-soft); font-variant-numeric: tabular-nums;
 }
 .rev-opt:hover { color: var(--ink); }
-.rev-opt.active { border-color: var(--ink); color: var(--ink); background: var(--chip); }
+.rev-opt.active { color: var(--ink); text-decoration: underline; text-underline-offset: .35em; text-decoration-color: var(--ink-soft); }
 .rev-notice {
-  margin: 0 0 16px var(--art-indent); padding: 7px 13px; font-size: 12.5px;
-  background: var(--chip); border: 1px solid var(--rule); border-radius: 8px;
-  color: var(--ink-soft);
+  margin: 0 0 16px var(--art-indent); padding: 4px 0 4px 12px; font-size: var(--t-xs);
+  border-left: 2px solid var(--rule); color: var(--ink-soft);
 }
 
 /* ── M3：其他文档 / 无法定位的串（折叠组，静态流式不参与对齐）── */
 .other-threads { margin: 30px 0 0 var(--art-indent); max-width: var(--art-w); }
 .other-threads-toggle {
-  font-family: var(--songti); font-size: 13px; color: var(--ink-soft); letter-spacing: .05em; padding: 4px 0;
+  font-family: var(--songti); font-size: var(--t-s); color: var(--ink-soft); letter-spacing: .05em; padding: 4px 0;
 }
 .other-threads-toggle:hover { color: var(--ink); }
 .other-threads-list { margin-top: 12px; display: flex; flex-direction: column; gap: 12px; }
 .anno-static { position: static; width: 100%; }
 .anno-static::before { display: none; }
 
-/* 画可用墨不用朱：朱砂只属于批注动作（评审定的规矩） */
+/* 画可用墨不用朱：朱砂只属于批注动作（评审定的规矩）。B：一枚 34px 墨色方印，只一个「可」字。 */
 .btn-qinci {
-  padding: 8px 22px; border-radius: 999px;
+  width: 34px; height: 34px; padding: 0; border-radius: 3px;
+  display: inline-grid; place-items: center;
   background: var(--ink); color: var(--paper-raised);
-  font-family: var(--songti); font-weight: 700; font-size: 14px;
-  letter-spacing: .25em; text-indent: .25em;
-  box-shadow: 0 2px 6px rgba(38, 33, 26, .3);
+  font-family: var(--songti); font-weight: 700; font-size: 15px;
+  letter-spacing: 0; text-indent: 0;
 }
 .btn-qinci:hover { opacity: .88; }
-.btn-qinci:disabled { opacity: .55; }
+.btn-qinci:disabled { opacity: .45; }
 
 /* 手机底栏（M0 · review #121 §5「判入口底部常驻」）：只在窄屏出，桌面永不显示。
    顶栏那排动作在单轴滚动下会随正文滚出屏幕，读长折时要发判/画可得先滚回顶——
@@ -700,10 +735,7 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
    **裸规则 display:none 必须写在下面 @media 的 display:flex 之前**（层叠守卫 css-cascade.test.js：
    媒体查询不加特异度，裸规则写后面会把它压死）。桌面(2005px)与测试闸门(1440px)都不进 ≤900 分支。 */
 .mobile-bar { display: none; }
-/* P0 顶栏「⋯」：只在手机档出（见下方 ≤900 块），桌面永不显示；同上，裸规则须写在 @media 之前。 */
-.more-btn { display: none; }
-/* 只住在「⋯」里的项（「更新到最新版」）：桌面不摆，手机档由 .mainbar.more-open .more-item 摊开 */
-.more-only { display: none; }
+/* 「⋯」与 .more-item / .more-only 的开关在题签行那段（.mainbar 旁），所有断点一致。 */
 
 /* ── 目录页（手机三层导航的第二层：折清单 → 这里 → 正文）──────────────
    与 .mobile-bar 同一套开关写法：**裸 display:none 必须写在下面 @media 的 display:block
@@ -713,13 +745,13 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
 .nav-up {
   display: block; width: 100%; text-align: left;
   padding: 14px 4px; min-height: 44px;
-  font-family: var(--songti); font-size: 15px; color: var(--ink-soft);
+  font-family: var(--songti); font-size: var(--t-s); color: var(--ink-soft);
   border-bottom: 1px solid var(--rule);
 }
 .nav-up:hover { color: var(--ink); }
 .nav-sec { margin-top: 18px; }
 .nav-sec-h {
-  font-family: var(--songti); font-size: 13px; font-weight: 400;
+  font-family: var(--songti); font-size: var(--t-xs); font-weight: 400;
   letter-spacing: .18em; text-indent: .18em; color: var(--ink-soft);
   margin: 0 0 6px; padding: 0 4px;
 }
@@ -727,52 +759,62 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
 .nav-item {
   display: block; width: 100%; text-align: left;
   padding: 12px 4px; min-height: 44px;        /* 触控下限，与底栏同一口径 */
-  font-size: 15px; line-height: 1.5; color: var(--ink);
+  font-size: var(--t-body); line-height: 1.5; color: var(--ink);
   border-bottom: 1px solid var(--rule);
 }
-/* 篇：当前那篇用朱砂左缘 + 加重标出来，不用一行灰色小注——PAIN #31 的教训正是
-   「信息在，但视觉重量配不上它的重要性」，灰色小字等于没有。 */
+/* 篇：当前那篇用墨色左缘 + 加重标出来，不用一行灰色小注——PAIN #31 的教训正是
+   「信息在，但视觉重量配不上它的重要性」，灰色小字等于没有。（B：导航位置用墨不用朱） */
 .nav-chapter { font-family: var(--songti); }
 .nav-chapter.active {
-  border-left: 3px solid var(--cinnabar); padding-left: 10px;
+  border-left: 2px solid var(--ink); padding-left: 10px;
   color: var(--ink); font-weight: 700;
 }
 /* 节：按层级缩进，沿用桌面右栏 .toc-l2 / .toc-l3 那套缩进语言 */
 .nav-l2 { padding-left: 20px; color: var(--ink-soft); }
-.nav-l3 { padding-left: 36px; color: var(--ink-soft); font-size: 14px; }
+.nav-l3 { padding-left: 36px; color: var(--ink-soft); font-size: var(--t-s); }
 
-/* 字号 A⁻/A⁺：顶栏里最不重要的控件，所以做成一对连体小钮，比 .btn-ghost 更收敛——
-   它旁边就是「画可」，那是全站唯一的定稿动作，不能被一个字号钮抢走视线。
+/* 字号 A⁻/A⁺ 与阅读宽度：住在「⋯」菜单里的一对文字钮。
    到顶/到底时按钮置灰而不是消失：消失会让另一个钮左右跳位。 */
-.read-size { display: inline-flex; border: 1px solid var(--rule); border-radius: 999px; overflow: hidden; }
+.read-size { display: inline-flex; gap: 14px; }
 .read-size-btn {
-  padding: 5px 10px; font: 13px var(--mono); color: var(--ink-soft); line-height: 1.2;
+  padding: 5px 6px; font-size: var(--t-s); color: var(--ink); line-height: 1.2; font-variant-numeric: tabular-nums;
 }
-.read-size-btn + .read-size-btn { border-left: 1px solid var(--rule); }
-.read-size-btn:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
+.read-size-btn:hover:not(:disabled) { color: var(--cinnabar-deep); }
 .read-size-btn:disabled { opacity: .35; cursor: default; }
 
+/* ── 深色版（B 要求完整深色，不是反色）──
+   深墨底、宣纸色正文、朱砂调亮。对比度（WCAG，按 #1C1916 纸底算）：正文 #ECE5D6 13.9:1、
+   次要 #ADA394 7.0:1、朱砂文字 #E8795E 6.1:1、链接 #EC8268 6.6:1——正文 ≥7、次要 ≥4.5 都过。
+   同一份定义给两个入口：手动「深色」挂 data-theme=dark；「跟随系统」靠媒体查询，
+   但手动「浅色」要能压过系统深色，所以媒体查询里排除 data-theme=light。
+   两块必须逐字相同，改一处改两处（CSS 没有 mixin；变量之外的差异都已收成变量）。 */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #1C1916; --paper-raised: #242019; --ink: #ECE5D6;
+  --ink-soft: #ADA394; --rule: #3A342B; --cinnabar: #E8795E; --cinnabar-deep: #EC8268;
+  --veil: rgba(46, 41, 33, .55);
+  --hover: rgba(58, 52, 43, .60);
+  --chip: rgba(58, 52, 43, .55);
+  --shadow: rgba(0, 0, 0, .35);
+  --seal-ring: inset 0 0 0 1.5px rgba(251, 247, 238, .35), inset 0 0 6px rgba(0, 0, 0, .45);
+  --hl-draft: rgba(232, 121, 94, .16);
+  --diff-add-bg: rgba(70, 160, 70, .16); --diff-add-line: #5FBF5F;
+  --diff-del-bg: rgba(224, 84, 64, .16); --diff-del-line: #E0684F;
+}
 @media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #1C1916; --paper-raised: #232019; --ink: #E8E0D2;
-    --ink-soft: #9A9081; --rule: #3A342B; --cinnabar: #D76752; --cinnabar-deep: #E06B50;
-    /* 蒙层必须跟着翻：浅色 rgba 蒙在深底上会变土绿（真机截图实证） */
-    /* 深色 cinnabar 2026-11 提亮一丝（原 #D2543C）：朱字在深底 4.23 / 3.93:1、朱底钮上的深色字 3.93:1，
-       都不到 AA；提亮后两个方向同时变好（4.96 / 4.61）。 */
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #1C1916; --paper-raised: #242019; --ink: #ECE5D6;
+    --ink-soft: #ADA394; --rule: #3A342B; --cinnabar: #E8795E; --cinnabar-deep: #EC8268;
     --veil: rgba(46, 41, 33, .55);
     --hover: rgba(58, 52, 43, .60);
     --chip: rgba(58, 52, 43, .55);
     --shadow: rgba(0, 0, 0, .35);
+    --seal-ring: inset 0 0 0 1.5px rgba(251, 247, 238, .35), inset 0 0 6px rgba(0, 0, 0, .45);
+    --hl-draft: rgba(232, 121, 94, .16);
+    --diff-add-bg: rgba(70, 160, 70, .16); --diff-add-line: #5FBF5F;
+    --diff-del-bg: rgba(224, 84, 64, .16); --diff-del-line: #E0684F;
   }
-  /* 深色下宣纸的朱丝栏要压得更淡，否则整屏泛红 */
-  body { background:
-    repeating-linear-gradient(90deg, transparent 0 38px, rgba(210, 84, 60, .045) 38px 39px),
-    var(--paper); }
-  .seal { box-shadow: inset 0 0 0 1.5px rgba(251, 247, 238, .35), inset 0 0 6px rgba(0, 0, 0, .45); }
-  ::highlight(zhupi-draft) { background-color: rgba(210, 84, 60, .28); }
-  /* diff 着色（PAIN #46）：深底上把染色略提亮，边条换更亮的绿/红，暗色下仍读得清 */
-  .diff-add { background: rgba(70, 160, 70, .16); border-left-color: #5FBF5F; }
-  .diff-del { background: rgba(224, 84, 64, .16); border-left-color: #E0684F; }
 }
 
 /* ── 单列档（≤1279）：放弃右缘眉批栏，正文单列、批注落到正文下方 ──
@@ -793,7 +835,8 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
   .rail-grip { display: none; }
 
   .stage-row { flex-direction: column; gap: 0; }
-  .stage-main { width: 100%; }
+  /* 单列时正文没有左缩进，朱丝栏与第一个字之间要留一指宽 */
+  .stage-main { width: 100%; padding-left: 14px; }
   .read-row { flex-direction: column; gap: 20px; }
   article { width: 100%; margin-left: 0; }
 
@@ -849,7 +892,8 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
   aside .brand-row { padding-bottom: 12px; }
   /* 内滚框拆掉。aside 没了高度上限之后 #pr-list 不会再被裁，但 `overflow-y:auto`
      仍立着一个滚动上下文，iOS 上照样会吃掉落在清单上的那一划。显式还给页面。 */
-  #pr-list { overflow: visible; }
+  #pr-list { overflow: visible; margin-left: -14px; padding-left: 14px; }
+  .pr-item.active::before { left: -14px; }
   /* 阅读页：清单退场。特异度 (0,2,1) 压过基础 `aside`，不依赖书写顺序。 */
   #app.reading aside { display: none; }
   /* 清单页：正文区整块收起。cur 为空时它只是一段空版心，但带着 18px+80px 的上下留白，
@@ -881,8 +925,8 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
   /* 输入框的 16px 不在这里——`.search-input` 的 `font:` 简写排在本块之后，
      写这儿会被静默压掉。见文件末尾「输入框 16px（≤900）」那段。 */
 
-  .mainbar { flex-wrap: wrap; gap: 10px; padding: 12px 16px 10px; }
-  .crumb { flex: 1 1 100%; }
+  .mainbar { flex-wrap: wrap; gap: 10px; padding: 14px 16px 10px; }
+  .crumb { flex: 1 1 100%; margin-left: 0; white-space: normal; }
   .actions { flex-wrap: wrap; }
 
   .notice { margin: 10px 16px 0; }
@@ -897,8 +941,8 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
     max-height: 40vh; overflow-y: auto;
     display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px;
     padding: 6px 6px 6px 14px;
-    background: linear-gradient(rgba(195,64,43,.08), rgba(195,64,43,.08)), var(--paper-raised);
-    border-color: var(--cinnabar); box-shadow: 0 4px 16px var(--shadow);
+    background: var(--paper-raised);
+    border-color: var(--rule); border-left-color: var(--ink-soft); box-shadow: 0 4px 16px var(--shadow);
   }
   .notice:not(.stale-banner) .notice-next { margin-left: 0; }
   .notice-close { display: inline-flex; align-items: center; justify-content: center; margin-left: auto; padding: 0 10px; }
@@ -908,12 +952,13 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
 
   /* 手机正文版式对齐设计稿③：17px 正文 / 1.8 行高（比桌面松一档，手机阅读更省力）。
      仍要乘 --read-scale——漏了乘就是「手机上 A⁺ 点了没反应」。 */
-  article h1 { font-size: calc(23px * var(--read-scale)); }
-  article p, article ul, article ol { font-size: calc(17px * var(--read-scale)); line-height: 1.8; }
-  article table { font-size: calc(13.5px * var(--read-scale)); display: block; overflow-x: auto; }
+  article h1 { font-size: calc(27px * var(--read-scale)); }
+  article p, article ul, article ol { font-size: calc(var(--t-body) * var(--read-scale)); line-height: 1.85; }
+  article table { font-size: calc(var(--t-s) * var(--read-scale)); display: block; overflow-x: auto; }
 
   /* 底栏出场：钉视口底缘，横排三钮，触控目标 ≥44px（Apple HIG 下限）。
-     裸规则 .mobile-bar{display:none} 在文件前部、这条之前——层叠守卫要的就是这个顺序。 */
+     裸规则 .mobile-bar{display:none} 在文件前部、这条之前——层叠守卫要的就是这个顺序。
+     B：同样去药丸——宋体文字钮，画可仍是墨色方印。底栏是浮层，阴影留着。 */
   .mobile-bar {
     display: flex; gap: 10px; align-items: stretch;
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 28;
@@ -922,48 +967,46 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
     box-shadow: 0 -2px 10px var(--shadow);
   }
   .mobile-bar-btn {
-    flex: 1; min-height: 44px; border-radius: 999px;
-    border: 1.5px solid var(--rule); background: var(--paper);
-    font-family: var(--songti); font-size: 15px; letter-spacing: .12em; color: var(--ink);
+    flex: 1; min-height: 44px; border-radius: 0;
+    border: 0; background: none;
+    font-family: var(--songti); font-size: var(--t-body); letter-spacing: .12em; color: var(--ink);
   }
   .mobile-bar-btn:disabled { opacity: .5; }
   /* 「‹ 目录」是导航不是动作：不参与等分，只占自己那点宽度，余量全留给判/呈/画可；
-     压成灰边灰字，免得跟旁边那三个抢视线。min-height 仍从 .mobile-bar-btn 继承 44px。 */
+     压成灰字，免得跟旁边那三个抢视线。min-height 仍从 .mobile-bar-btn 继承 44px。 */
   .mobile-bar-back { flex: 0 0 auto; padding: 0 14px; color: var(--ink-soft); letter-spacing: .06em; }
   /* 提交＝朱砂（批注动作那一族），画可＝墨底（全站唯一定稿动作），与桌面同色语义。 */
-  .mobile-bar-submit { border-color: var(--cinnabar); color: var(--cinnabar); }
-  .mobile-bar-qinci { background: var(--ink); border-color: var(--ink); color: var(--paper-raised); font-weight: 700; }
+  .mobile-bar-submit { color: var(--cinnabar-deep); font-weight: 700; }
+  .mobile-bar-qinci { background: var(--ink); color: var(--paper-raised); font-weight: 700; border-radius: 3px; flex: 0 0 auto; padding: 0 18px; }
 
   /* ── P0 手机档修（2026-10-09，门下 iOS 重设计 #180 第一期）─────────────────────
      走查实测：打开一折首屏零正文（h1 在 844px）、顶栏 8 钮两行、触控目标 26–36px、
-     到顶/到底浮钮压字。以下五条只在本档生效，桌面一条不碰。 */
-
-  /* ① 顶栏：引用此处 / 回奏 / 携卷 / A± 是桌面或 agent 向的动作，收进「⋯」，点开才在同一行后面摊出。
-     顶栏于是只剩 面包屑一行 + 刷新/判/画可/⋯ 一行。 */
-  .more-item { display: none; }
-  .mainbar.more-open .more-item { display: inline-flex; align-items: center; justify-content: center; }
-  .more-btn { display: inline-flex; align-items: center; justify-content: center; font-size: 18px; letter-spacing: 0; }
+     到顶/到底浮钮压字。以下几条只在本档生效，桌面一条不碰。
+     ①「⋯」菜单 2026-11-03 起所有断点一致，开关在题签行那段，这里不再重复。 */
 
   /* ② 触控目标 ≥44×44（Apple HIG 下限）。一条兜底压过各处 26–36px 的桌面尺寸：
      特异度 (1,0,1) 高于后文所有按钮类规则，不依赖书写顺序。拖宽手柄是 aria-hidden 的装饰件，排除。
      正文里的行内链接不在此列（行内文字链接按行高排版，WCAG 2.5.8 的行内例外）。 */
   #app button:not([aria-hidden="true"]), #app [role="button"] { min-height: 44px; min-width: 44px; }
   .read-size-btn { display: inline-flex; align-items: center; justify-content: center; }
+  /* 题签行的动作钮在 44px 下别撑开间距；菜单面板贴右缘 */
+  .actions { gap: 6px; }
+  .more-menu { min-width: 220px; }
 
-  /* ③ 折子说明收成一行药丸：默认收起（ui.js 开折时手机档不摊开），拍板条数在药丸标题上常显。
+  /* ③ 折子说明默认收起（ui.js 开折时手机档不摊开），拍板条数在标题上常显。
      收起时连 TLDR 常显行也收——首屏让给正文；点开照旧全文。 */
   /* 折首块的基础规则写在本档之后，同特异度会被它压回去——一律挂 #app 抬高特异度。 */
-  #app .folder-body { padding: 0 14px; border-radius: 999px; }
-  #app .folder-body.open { border-radius: 9px; padding-bottom: 10px; }
+  #app .folder-body { padding: 0 0 0 12px; }
+  #app .folder-body.open { padding-bottom: 10px; }
   #app .folder-body:not(.open) .folder-body-tldr { display: none; }
   #app .folder-body-toggle {
     display: flex; align-items: center; gap: 6px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13.5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--t-s);
   }
-  /* 已呈判同理：它本来就默认收起，只把标题行垫到 44 高、并成同款药丸 */
-  #app .zongpi-shown { padding: 0 14px; border-radius: 999px; }
-  #app .zongpi-shown:has(.zongpi-shown-list) { border-radius: 9px; padding-bottom: 10px; }
-  #app .zongpi-shown-toggle { display: flex; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13.5px; }
+  /* 已呈判同理：它本来就默认收起，只把标题行垫到 44 高 */
+  #app .zongpi-shown { padding: 0 0 0 12px; }
+  #app .zongpi-shown:has(.zongpi-shown-list) { padding-bottom: 10px; }
+  #app .zongpi-shown-toggle { display: flex; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--t-s); }
 
   /* ④ 到顶/到底浮钮在手机上撤掉：left 4px 压在正文（left 16px）上盖字；
      手机有系统级的点状态栏回顶，底栏也常驻，用不着这对钮。 */
@@ -974,13 +1017,13 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
    默认折叠成一行（issue #1）：这块在正文之上，评审历史一长就把文档推下 2–3 屏，
    读者滚不到文档自己的 TL;DR。宽度对齐正文列（680px），markdown 复用 .anno-shown-body。 */
 .zongpi-shown {
-  margin: 0 0 20px var(--art-indent); padding: 10px 16px; max-width: var(--art-w);
-  background: var(--paper-raised); border: 1px solid var(--rule);
-  border-left: 3px solid var(--ink-soft); border-radius: 9px;
+  margin: 0 0 20px var(--art-indent); padding: 2px 0 2px 14px; max-width: var(--art-w);
+  background: none; border: 0;
+  border-left: 1px solid var(--rule); border-radius: 0;
 }
 .zongpi-shown-toggle {
   display: block; width: 100%; text-align: left; padding: 2px 0;
-  font-family: var(--songti); font-size: 12.5px; letter-spacing: .08em; color: var(--ink-soft);
+  font-family: var(--songti); font-size: var(--t-xs); letter-spacing: .08em; color: var(--ink-soft);
 }
 .zongpi-shown-toggle:hover { color: var(--ink); }
 .zongpi-shown-list { margin-top: 12px; display: flex; flex-direction: column; gap: 14px; }
@@ -1004,20 +1047,25 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
 /* 折子说明（PR body 的五段）：与「已呈判」同一套壳，坐在它上面——拍板点比评审历史更该先入眼。
    issue #13：有「待你拍板」就默认展开，标题用朱砂描一下左缘，让「这折要你决定」在余光里就看得见；
    没有拍板点时退回墨色安静系，与判块无异（常态不添噪音）。 */
+/* B：不是卡，是一段引文体——左缘一条淡线、底下一条淡线，宋体小题。
+   有拍板点时：题改墨色、前面一个 6px 朱砂点（这是「当前折等你拍」那一处允许的朱砂）。 */
 .folder-body {
-  margin: 0 0 20px var(--art-indent); padding: 10px 16px; max-width: var(--art-w);
-  background: var(--paper-raised); border: 1px solid var(--rule);
-  border-left: 3px solid var(--ink-soft); border-radius: 9px;
+  margin: 0 0 28px var(--art-indent); padding: 2px 0 18px 14px; max-width: var(--art-w);
+  background: none; border: 0;
+  border-left: 1px solid var(--rule); border-bottom: 1px solid var(--rule); border-radius: 0;
 }
-.folder-body.has-decisions { border-left-color: var(--cinnabar); }
 .folder-body-toggle {
   display: block; width: 100%; text-align: left; padding: 2px 0;
-  font-family: var(--songti); font-size: 12.5px; letter-spacing: .08em; color: var(--ink-soft);
+  font-family: var(--songti); font-size: var(--t-xs); letter-spacing: .08em; color: var(--ink-soft);
 }
 .folder-body-toggle:hover { color: var(--ink); }
-.folder-body-toggle.has-decisions { color: var(--cinnabar); }
+.folder-body-toggle.has-decisions { color: var(--ink); font-weight: 700; }
+.folder-body-toggle.has-decisions::before {
+  content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--cinnabar); margin-right: 6px; vertical-align: 2px;
+}
 /* F1：TLDR 那句常显（收起态也在），坐在标题下、正文之上，让「这折说了什么」不必展开就看得见。 */
-.folder-body-tldr { margin: 6px 0 0; font-size: calc(14px * var(--read-scale)); line-height: 1.65; color: var(--ink); }
+.folder-body-tldr { margin: 6px 0 0; font-size: calc(var(--t-s) * var(--read-scale)); line-height: 1.75; color: var(--ink); }
 /* 同 .zongpi-shown：.anno-shown-body 的数值是给右缘窄卡调的，搬到 680px 的折首块上要放大一档，
    且必须用两段选择器压过它，不靠源码顺序。 */
 /* **高度封顶 + 块内滚动**（复审补）：这块有拍板点时默认展开，而 body 多长由写折那方决定、
@@ -1045,67 +1093,64 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
 /* 清单两栏：待审 / 已画可（归档只读） */
 /* 三个 tab 要挤进 240px 的左栏（笔记本档），所以 padding/字号都比两个 tab 时紧一档，
    且 min-width:0 + nowrap + ellipsis 兜底：数字涨到三位数也只是截断，不换行、不撑破。 */
-.list-tabs { display: flex; gap: 4px; padding: 0 4px 10px; }
+/* 清单 tab：纯文字宋体一行，底下一条淡线；当前 tab 墨色加重（mock-B 的 .tabs） */
+.list-tabs { display: flex; flex-wrap: wrap; gap: 2px 12px; padding: 0 0 10px; border-bottom: 1px solid var(--rule); }
 .list-tab {
-  flex: 1; min-width: 0; padding: 6px 4px; border-radius: 8px; border: 1px solid transparent;
-  font-family: var(--songti); font-size: 12.5px; color: var(--ink-soft);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex: none; min-width: 0; padding: 2px 0; border: 0; border-radius: 0;
+  font-family: var(--songti); font-size: var(--t-s); color: var(--ink-soft); letter-spacing: .02em;
+  white-space: nowrap; font-variant-numeric: tabular-nums;
 }
 .list-tab:hover { color: var(--ink); }
-.list-tab.active { background: var(--chip); border-color: var(--rule); color: var(--ink); }
+.list-tab.active { color: var(--ink); font-weight: 700; }
 /* 弘文馆 tab 永远比另外两个淡一档——它是书架不是待办，选中了也不该抢眼。 */
 .list-tab-shelf { opacity: .8; }
 .list-tab-shelf.active { opacity: 1; }
-/* ── 签：按主题归堆的 chip 条 + 「按签」视图 ── */
-.qian-bar { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 4px 10px; }
+/* ── 签：按主题归堆的词条 + 「按签」视图 ── */
+.qian-bar { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 0 0 10px; }
 .qian-filter {
-  padding: 3px 9px; border-radius: 999px; border: 1px solid var(--rule);
-  font-family: var(--songti); font-size: 12px; color: var(--ink-soft);
+  padding: 2px 0; font-family: var(--songti); font-size: var(--t-xs); color: var(--ink-soft); letter-spacing: .04em;
 }
 .qian-filter:hover { color: var(--ink); }
-.qian-filter.active { background: var(--chip); border-color: var(--cinnabar); color: var(--ink); }
-.qian-clear { padding: 3px 9px; font-size: 12px; color: var(--cinnabar-deep); }
-.qian-crumb { font-size: 12px; color: var(--ink-soft); padding: 2px 6px 8px; margin: 0; }
+.qian-filter.active { color: var(--ink); font-weight: 700; text-decoration: underline; text-underline-offset: .3em; text-decoration-color: var(--ink-soft); }
+.qian-clear { padding: 2px 0; font-size: var(--t-xs); color: var(--cinnabar-deep); }
+.qian-crumb { font-size: var(--t-xs); color: var(--ink-soft); opacity: .75; padding: 8px 0 4px; margin: 0; }
 .pr-item.pr-done::before { background: var(--ink-soft); opacity: .5; }
 .pr-item.pr-done h3 { color: var(--ink-soft); }
 .setup-forget { color: var(--cinnabar-deep); }
 
 /* ── 搜索 ── */
-.search-row { display: flex; gap: 6px; padding: 0 4px 10px; }
+.search-row { display: flex; gap: 10px; padding: 0 0 12px; align-items: center; }
 .search-input {
-  flex: 1; padding: 8px 12px; font: 13.5px var(--sans); color: var(--ink);
-  background: var(--paper); border: 1px solid var(--rule); border-radius: 8px; outline: none;
+  flex: 1; min-width: 0; padding: 6px 2px; font: 14px var(--sans); color: var(--ink);
+  background: transparent; border: 0; border-bottom: 1px solid var(--rule); border-radius: 0; outline: none;
 }
-.search-input:focus { border-color: var(--cinnabar); }
-.search-clear { padding: 6px 12px; font-size: 13px; flex: none; }
+.search-input:focus { border-bottom-color: var(--ink-soft); }
+.search-clear { padding: 4px 0; font-size: var(--t-xs); flex: none; }
 .search-group { margin-bottom: 14px; }
 .search-group-title {
-  font-family: var(--songti); font-size: 13px; font-weight: 700;
-  color: var(--ink); padding: 0 6px 6px; line-height: 1.5;
+  font-family: var(--songti); font-size: var(--t-s); font-weight: 700;
+  color: var(--ink); padding: 0 0 6px; line-height: 1.5;
 }
 .search-hit {
-  display: block; width: 100%; text-align: left;
-  padding: 8px 10px; border-radius: 8px; border: 1px solid transparent; margin-bottom: 4px;
+  display: block; width: 100%; text-align: left; white-space: normal;
+  padding: 8px 0; border-bottom: 1px solid var(--rule);
 }
-.search-hit:hover { background: var(--hover); border-color: var(--rule); }
-.search-hit-meta { display: block; font-size: 11.5px; color: var(--ink-soft); margin-bottom: 2px; }
-.search-hit-snippet { display: block; font-size: 13px; line-height: 1.6; color: var(--ink); word-break: break-all; }
+.search-hit:hover .search-hit-snippet { color: var(--cinnabar-deep); }
+.search-hit-meta { display: block; font-size: var(--t-xs); color: var(--ink-soft); margin-bottom: 2px; }
+.search-hit-snippet { display: block; font-size: var(--t-s); line-height: 1.6; color: var(--ink); word-break: break-all; }
 
 /* 搜索跳转落点：闪一下定位（中性 chip 色——朱砂仍只属于批注动作） */
 @keyframes searchFlash { 0% { background: var(--chip); } 100% { background: transparent; } }
 .search-flash { animation: searchFlash 1.6s ease-out; }
 
 /* F8 语言切页：同一折的中英两版。墨色分段控件，朱砂仍只属于批注动作 */
-.lang-switch {
-  display: inline-flex; gap: 4px; margin: 0 0 16px var(--art-indent);
-  border: 1px solid var(--rule); border-radius: 999px; padding: 3px; background: var(--paper-raised);
-}
+.lang-switch { display: inline-flex; gap: 16px; margin: 0 0 16px var(--art-indent); }
 .lang-opt {
-  padding: 4px 14px; border-radius: 999px; font-size: 13px; color: var(--ink-soft);
+  padding: 2px 0; font-size: var(--t-s); color: var(--ink-soft);
   font-family: var(--songti); letter-spacing: .08em;
 }
 .lang-opt:hover { color: var(--ink); }
-.lang-opt.active { background: var(--chip); color: var(--ink); }
+.lang-opt.active { color: var(--ink); text-decoration: underline; text-underline-offset: .35em; text-decoration-color: var(--ink-soft); }
 
 /* 体例检查角标。窄栏里只给一个字的宽度 —— 「✗ 体例」四字已是上限。
    合格只画一个 ✓：绿色的东西不需要解释，红色的才需要。 */
@@ -1130,11 +1175,12 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
 }
 /* 顶栏「需核实 N」：读折时提示本篇有几处未验证声明 */
 .verify-count {
-  margin-left: 8px; padding: 0 6px; border-radius: 4px; font-size: 11px;
-  border: 1px solid var(--cinnabar); color: var(--cinnabar-deep); white-space: nowrap;
+  margin-left: 10px; font-size: var(--t-xs); letter-spacing: 0;
+  color: var(--ink-soft); white-space: nowrap;
 }
-/* 列表折卡角标：这折共几处「需核实」 */
-.verify-badge { margin-left: .5em; font-size: .85em; color: var(--cinnabar-deep); white-space: nowrap; }
+.verify-count::before { content: "· "; }
+/* 列表折卡角标：这折共几处「需核实」（墨色——朱砂预算留给「等你拍」与草稿） */
+.verify-badge { margin-left: .5em; font-size: var(--t-xs); color: var(--ink-soft); white-space: nowrap; }
 /* F12 携卷：剪贴板写不进时的兜底。命令式挂在 body 下，一次性 overlay + 可全选文本框。 */
 .carry-fallback {
   position: fixed; inset: 0; z-index: 1000;
@@ -1169,13 +1215,13 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
   position: sticky; z-index: 20; top: 10px; width: var(--toc-w);
   flex: none; align-self: flex-start;
   max-height: calc(100vh - 190px); display: none; flex-direction: column;
-  background: var(--veil); border: 1px solid var(--rule); border-radius: 10px;
-  padding: 8px 6px; box-shadow: 0 2px 10px var(--shadow);
+  background: none; border: 0; border-left: 1px solid var(--rule); border-radius: 0;
+  padding: 2px 0 2px 6px;
 }
 @media (min-width: 1500px) { .toc { display: flex; } }
 .toc-head {
   flex: none; text-align: left; padding: 5px 8px 9px;
-  font-family: var(--songti); font-size: 15px; letter-spacing: .1em; color: var(--ink-soft);
+  font-family: var(--songti); font-size: var(--t-s); letter-spacing: .1em; color: var(--ink-soft);
 }
 .toc-head:hover { color: var(--ink); }
 .toc-collapsed .toc-head { padding-bottom: 4px; }
@@ -1193,12 +1239,10 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
   white-space: normal; overflow: hidden;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
-.toc-link:hover { background: var(--hover); color: var(--ink); }
+.toc-link:hover { color: var(--ink); }
 .toc-l2 .toc-link { padding-left: 20px; }
-.toc-l3 .toc-link { padding-left: 33px; font-size: 13px; }
-.toc-active .toc-link {
-  color: var(--ink); border-left-color: var(--cinnabar); background: var(--chip);
-}
+.toc-l3 .toc-link { padding-left: 33px; font-size: var(--t-xs); }
+.toc-active .toc-link { color: var(--ink); border-left-color: var(--ink); font-weight: 700; }
 
 /* ── F14 章下拉（章多时取代 tab 条）—— 与 doc-tabs 同一左缩进，墨色控件 ── */
 /* 章栏（左）。视觉语言照抄大纲栏，镜像到版心左侧；sticky 的前提同样是父级
@@ -1208,22 +1252,22 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
   position: sticky; z-index: 20; top: 10px; width: var(--chap-w);
   flex: none; align-self: flex-start;
   max-height: calc(100vh - 190px); display: flex; flex-direction: column;
-  background: var(--veil); border: 1px solid var(--rule); border-radius: 10px;
-  padding: 8px 6px; box-shadow: 0 2px 10px var(--shadow);
+  background: none; border: 0; border-right: 1px solid var(--rule); border-radius: 0;
+  padding: 2px 6px 2px 0;
 }
 .chapter-rail-head {
-  font-family: var(--songti); font-size: 12.5px; letter-spacing: .08em;
+  font-family: var(--songti); font-size: var(--t-xs); letter-spacing: .08em;
   color: var(--ink-soft); padding: 4px 8px 8px;
 }
 .chapter-rail-list { list-style: none; overflow-y: auto; }
 .chapter-rail-opt {
-  display: flex; gap: 8px; width: 100%; text-align: left; align-items: baseline;
-  padding: 5px 8px; border-radius: 6px; font-size: 13px; color: var(--ink-soft);
+  display: flex; gap: 8px; width: 100%; text-align: left; align-items: baseline; white-space: normal;
+  padding: 5px 8px; font-size: var(--t-s); color: var(--ink-soft); font-family: var(--songti);
   line-height: 1.45;
 }
-.chapter-rail-opt:hover { color: var(--ink); background: var(--paper-raised); }
-.chapter-rail-opt.active { color: var(--ink); font-weight: 600; }
-.chapter-rail-num { font: 11px var(--mono); opacity: .6; flex: none; }
+.chapter-rail-opt:hover { color: var(--ink); }
+.chapter-rail-opt.active { color: var(--ink); font-weight: 700; }
+.chapter-rail-num { font-size: var(--t-xs); font-variant-numeric: tabular-nums; opacity: .7; flex: none; }
 .chapter-rail-name { min-width: 0; }
 
 /* --- 章栏/章下拉 二选一 -------------------------------------------------
@@ -1239,34 +1283,33 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
 /* PAIN #31：这是「整本书」的入口，不是可有可无的小控件。原来一圈灰边 + 灰字，
    一本 22 章的书打开只看得见「这一篇」，得先知道那儿能点。加朱砂左缘 + 实底 + 深色书名，
    让「这里还有整本」在余光里就现出重量（同 folder-body.has-decisions 用朱砂提示的手法）。 */
+/* B：一行宋体文字 + 墨色左缘，不再是药丸；展开的菜单是浮层，留阴影 */
 .chapters-summary {
   display: inline-flex; align-items: baseline; gap: 10px; cursor: pointer; list-style: none;
-  padding: 7px 16px; border-radius: 999px; border: 1px solid var(--rule);
-  border-left: 3px solid var(--cinnabar);
-  background: var(--paper-raised); max-width: 100%;
+  padding: 4px 0 4px 12px; border-left: 2px solid var(--ink); max-width: 100%;
 }
-.chapters-summary:hover { border-color: var(--ink-soft); border-left-color: var(--cinnabar); }
+.chapters-summary:hover .chapters-cur { color: var(--cinnabar-deep); }
 .chapters-summary::-webkit-details-marker { display: none; }
-.chapters-summary::after { content: "▾"; color: var(--cinnabar); font-size: 12px; font-weight: 700; }
+.chapters-summary::after { content: "▾"; color: var(--ink-soft); font-size: var(--t-xs); }
 .chapters[open] .chapters-summary::after { content: "▴"; }
-.chapters-label { font: 12px var(--mono); color: var(--cinnabar); font-weight: 600; flex: none; }
+.chapters-label { font-family: var(--songti); font-size: var(--t-xs); color: var(--ink-soft); letter-spacing: .08em; flex: none; }
 .chapters-cur {
-  font-family: var(--songti); font-size: 14px; color: var(--ink);
+  font-family: var(--songti); font-size: var(--t-s); color: var(--ink); font-weight: 700;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .chapters-menu {
-  list-style: none; margin: 6px 0 0; padding: 6px; position: absolute; z-index: 20; left: 0;
+  list-style: none; margin: 6px 0 0; padding: 6px 0; position: absolute; z-index: 20; left: 0;
   min-width: 260px; max-width: 420px; max-height: 60vh; overflow-y: auto;
-  background: var(--paper-raised); border: 1px solid var(--rule); border-radius: 10px;
+  background: var(--paper-raised); border: 1px solid var(--rule);
   box-shadow: 0 4px 14px var(--shadow);
 }
 .chapters-opt {
-  display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left;
-  padding: 7px 10px; border-radius: 7px; font-size: 14px; line-height: 1.45; color: var(--ink-soft);
+  display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left; white-space: normal;
+  padding: 7px 14px; font-size: var(--t-s); line-height: 1.45; color: var(--ink-soft); font-family: var(--songti);
 }
-.chapters-opt:hover { background: var(--hover); color: var(--ink); }
-.chapters-opt.active { color: var(--ink); background: var(--chip); }
-.chapters-num { font: 11px var(--mono); color: var(--ink-soft); flex: none; min-width: 1.6em; }
+.chapters-opt:hover { color: var(--ink); }
+.chapters-opt.active { color: var(--ink); font-weight: 700; }
+.chapters-num { font-size: var(--t-xs); font-variant-numeric: tabular-nums; color: var(--ink-soft); flex: none; min-width: 1.6em; }
 @media (max-width: 900px) { .chapters { margin-left: 0; } }
 
 /* ── 输入框 16px（≤900）——必须写在这里，不能写进文件前部那个 ≤900 块 ──────
@@ -1290,7 +1333,7 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
   flex: none; margin-right: 6px; vertical-align: 1px;
   background: var(--ink-soft);
 }
-.wait-you-decide { background: #C3402B; }   /* 等你拍 —— 朱砂，最急 */
+.wait-you-decide { background: var(--cinnabar); }   /* 等你拍 —— 朱砂，最急（深色下跟着变量提亮） */
 .wait-you-read   { background: #D9A404; }   /* 等你读 */
 .wait-agent      { background: #3B7BB5; }   /* 等 agent —— 不用你动 */
 .wait-idle       { background: #B8AE9C; }   /* 闲 */
@@ -1299,57 +1342,61 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
 
 .work-hidden { display: none; }
 
-.dash { flex: 1; min-height: 0; overflow-y: auto; padding: 26px 36px 60px; }
-.dash-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.dash-h { font-family: var(--songti); font-size: 20px; font-weight: 700; }
+/* 邸报 / 总览的 B 版（样稿没做，按同一语言设计）：目录体——项目名是宋体小题带一道墨线，
+   每折一行、行间淡横线；当前折左缘 2px 墨线；朱砂只给「等你拍」的点。版心与 .work 同一套居中式。 */
+.dash {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 26px var(--work-pad) 60px;
+  padding-inline: max(var(--work-pad), calc((100% - var(--stage)) / 2));
+}
+.dash-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; max-width: var(--main-w); }
+.dash-h { font-family: var(--songti); font-size: var(--t-h2); font-weight: 700; letter-spacing: .02em; }
 .dash-tally {
-  display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
-  margin: 12px 0 22px; padding-bottom: 14px; border-bottom: 1px solid var(--rule);
-  font-size: 13px; color: var(--ink-soft);
+  display: flex; flex-wrap: wrap; gap: 14px; align-items: center; max-width: var(--main-w);
+  margin: 10px 0 26px; padding-bottom: 14px; border-bottom: 1px solid var(--rule);
+  font-size: var(--t-xs); color: var(--ink-soft);
 }
 .tally-item { display: inline-flex; align-items: center; }
 .tally-zombie { color: var(--ink-soft); font-style: italic; }
 .tally-empty { font-style: italic; }
 
-.dash-group { margin-bottom: 26px; }
+.dash-group { margin-bottom: 30px; max-width: var(--main-w); }
 .dash-proj {
   display: flex; align-items: baseline; gap: 8px;
-  font-family: var(--songti); font-size: 15px; font-weight: 700; color: var(--ink);
-  padding-bottom: 7px; margin-bottom: 6px; border-bottom: 1px solid var(--rule);
+  font-family: var(--songti); font-size: var(--t-body); font-weight: 700; color: var(--ink);
+  padding-bottom: 6px; margin-bottom: 2px; border-bottom: 1.5px solid var(--ink);
 }
-.dash-proj-n { font: 11px var(--mono); color: var(--ink-soft); }
+.dash-proj-n { font-size: var(--t-xs); font-variant-numeric: tabular-nums; color: var(--ink-soft); font-family: var(--sans); font-weight: 400; }
 
 .dash-row {
-  display: block; width: 100%; text-align: left;
-  padding: 9px 12px; margin-bottom: 3px; border-radius: 8px;
-  border: 1px solid transparent; background: transparent;
+  display: block; width: 100%; text-align: left; position: relative; white-space: normal;
+  padding: 10px 0; margin: 0; border-radius: 0;
+  border: 0; border-bottom: 1px solid var(--rule); background: transparent;
 }
-.dash-row:hover { background: var(--hover); }
-.dash-row.active { background: var(--paper-raised); border-color: var(--rule); }
+.dash-row:hover .dash-title { color: var(--cinnabar-deep); }
+.dash-row.active::before { content: ""; position: absolute; left: -14px; top: 12px; bottom: 10px; width: 2px; background: var(--ink); }
+.dash-row.active .dash-title { font-weight: 700; }
 .dash-row.zombie { opacity: .55; }
 .dash-row.zombie .dash-title { text-decoration: line-through; text-decoration-color: var(--ink-soft); }
-.dash-row-head { display: flex; align-items: baseline; gap: 8px; }
-.dash-num { font: 11.5px var(--mono); color: var(--ink-soft); flex: none; }
+.dash-row-head { display: flex; align-items: baseline; gap: 10px; }
+.dash-num { font-size: var(--t-xs); font-variant-numeric: tabular-nums; color: var(--ink-soft); flex: none; min-width: 3.2em; }
 .dash-title {
-  font-family: var(--songti); font-size: 14.5px; line-height: 1.45; color: var(--ink);
+  font-family: var(--songti); font-size: 16px; line-height: 1.5; color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0;
 }
-.dash-ago { font-size: 11.5px; color: var(--ink-soft); flex: none; }
-.kind-chip {
-  font-size: 11px; color: var(--ink-soft); background: var(--chip);
-  padding: 1px 6px; border-radius: 4px; flex: none;
-}
+.dash-ago { font-size: var(--t-xs); color: var(--ink-soft); flex: none; font-variant-numeric: tabular-nums; }
+.dash-row .kind-chip { flex: none; margin-left: 0; }
+.dash-row .kind-chip::before { content: ""; }
 
-/* 关系条：只在有关系可说时出现，所以这里不留空占位 */
-.rel-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 5px 0 0 21px; }
+/* 关系条：只在有关系可说时出现，所以这里不留空占位。词条用一条底线区分可点与否，不画盒 */
+.rel-row { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0 0 calc(3.2em + 10px + 13px); }
 .rel-chip {
-  font-size: 11.5px; line-height: 1.6; padding: 0 7px; border-radius: 4px;
-  border: 1px solid var(--rule); background: var(--paper-raised); color: var(--ink-soft);
+  font-size: var(--t-xs); line-height: 1.6; padding: 0; border: 0; background: none; color: var(--ink-soft);
 }
-button.rel-chip:hover { border-color: var(--ink-soft); color: var(--ink); }
-.rel-covered   { border-color: #C3402B; color: #9C2F1F; }   /* 已被盖 —— 不用读 */
-.rel-blocked   { border-color: #D9A404; color: #8A6A02; }   /* 等谁先定 */
-.rel-unlocked  { border-color: #3B7BB5; color: #2A5B87; }   /* 依赖已画可 */
+button.rel-chip { text-decoration: underline; text-underline-offset: .25em; text-decoration-color: var(--rule); }
+button.rel-chip:hover { color: var(--ink); text-decoration-color: var(--ink-soft); }
+.rel-covered   { color: var(--cinnabar-deep); }   /* 已被盖 —— 不用读 */
+.rel-blocked   { color: #8A6A02; }                /* 等谁先定 */
+.rel-unlocked  { color: #2A5B87; }                /* 依赖已画可 */
 
 .list-tab.dash-btn { margin-left: auto; }
 

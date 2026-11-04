@@ -46,7 +46,7 @@ export const S = deepFreeze({
   action: {
     refresh: '刷新',
     more: '⋯',
-    moreTitle: '更多：引用此处 / 回奏 / 携卷 / 字号',
+    moreTitle: '更多：刷新 / 引用此处 / 回奏 / 携卷 / 字号 / 阅读宽度 / 外观',
     copyRef: '引用此处',
     copyRefTitle: '拷涂归直达链（按住 Alt 拷 GitHub 链接）',
     happy: '回奏',
@@ -99,6 +99,12 @@ export const S = deepFreeze({
     label: (p) => `宽·${({ fill: '铺满', medium: '适中', narrow: '窄' })[p] ?? '铺满'}`,
     title: (p) => `阅读宽度：${({ fill: '铺满（随窗口）', medium: '适中（约 900）', narrow: '窄（680）' })[p] ?? '铺满（随窗口）'}`
       + ' —— 点一下切换；拖过正文右缘手柄则按拖的宽度，双击手柄恢复档位',
+  },
+
+  // 外观（「⋯」里，点一下轮换）。B · 宣纸书卷起有完整深色版，Mac 外观 Auto 的人晚上多半看到深色。
+  appearance: {
+    label: (t) => `外观·${({ auto: '跟随系统', light: '浅色', dark: '深色' })[t] ?? '跟随系统'}`,
+    title: (t) => `外观：${({ auto: '跟随系统（默认）', light: '浅色', dark: '深色' })[t] ?? '跟随系统（默认）'} —— 点一下切换，记住选择`,
   },
 
   // 侧栏导航 / 三栏清单
