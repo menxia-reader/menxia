@@ -13,6 +13,7 @@ export function Topbar({
   cur, archived, onHead, busy, draftCount, verifyN = 0, happyUrl, stale, notice, carrying,
   readStep = 1, onReadStep, widthPreset = 'fill', onWidthPreset, moreOpen = false, onMore, onUpdate, updating = false,
   theme = 'auto', onTheme, style = 'b', onStyle,
+  backend = 'github', onBackend, loggedIn = false, onLogin, onLogout,
   onRefresh, onCopyRef, onCarry, onZongpi, onSubmit, onQinci,
   nextUp, onNextUp, onNoticeClose,
 }) {
@@ -73,6 +74,13 @@ export function Topbar({
                   onClick=${onStyle}>${S.style.label(style)}</button>`}
                 ${onTheme && html`<button class="btn-ghost more-item appearance-btn" title=${S.appearance.title(theme)}
                   onClick=${onTheme}>${S.appearance.label(theme)}</button>`}
+                ${/* 数据源（M3c）：GitHub ⇄ 门下服务；门下模式下再给登录/登出。 */ ''}
+                ${onBackend && html`<button class="btn-ghost more-item backend-btn" title=${S.backend.title(backend)}
+                  onClick=${onBackend}>${S.backend.label(backend)}</button>`}
+                ${backend === 'service' && loggedIn && onLogout && html`<button class="btn-ghost more-item svc-logout"
+                  title=${S.backend.logoutTitle} onClick=${onLogout}>${S.backend.logout}</button>`}
+                ${(backend !== 'service' || !loggedIn) && onLogin && html`<button class="btn-ghost more-item svc-login"
+                  title=${S.backend.loginTitle} onClick=${onLogin}>${S.backend.login}</button>`}
                 ${onUpdate && html`<button class="btn-ghost more-item more-only update-app"
                   title=${S.stale.updateTitle} disabled=${updating} onClick=${onUpdate}>${updating ? S.stale.updating : S.stale.update}</button>`}
               </span>`}

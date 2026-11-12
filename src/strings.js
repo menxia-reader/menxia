@@ -69,6 +69,26 @@ export const S = deepFreeze({
     expandTitle: '展读此串——从眉批栏捞出来铺在宽栏上细读（Esc 收）',
   },
 
+  // 数据源（M3c）：GitHub（默认）/ 门下服务；登录门下走 OAuth
+  backend: {
+    label: (b) => `数据源：${b === 'service' ? '门下服务' : 'GitHub'}`,
+    title: (b) => (b === 'service'
+      ? '当前从门下服务读写（OAuth 登录）。点一下切回 GitHub（PAT）'
+      : '当前从 GitHub 读写（PAT）。点一下切到门下服务（OAuth 登录）'),
+    switchConfirm: (to) => `切换数据源到「${to === 'service' ? '门下服务' : 'GitHub'}」？页面会重新载入，未呈的草稿留在本机不丢。`,
+    login: '登录门下',
+    loginTitle: '用门下账号登录（浏览器跳到门下服务授权页，回来即登录；钥匙只存这台设备）',
+    logout: '登出门下',
+    logoutTitle: '作废本设备的门下授权并清掉本地钥匙',
+    setupLead: '数据源已设为门下服务：折子从门下读、涂归与判写回门下。用门下账号登录即可，不需要 GitHub 钥匙。',
+    setupNote: '登录会跳到门下服务的授权页，确认后自动回到这里。token 只存这台设备的浏览器。',
+    useGithub: '改用 GitHub 数据源',
+    loggedOut: '已登出门下。',
+    loginFailed: (msg) => `登录门下失败：${msg}`,
+    newRevision: (n) => `这折有新版本（v${n}），已切到最新版。`,
+    eventsRefreshed: (n) => `门下有 ${n} 条新动态，清单已刷新。`,
+  },
+
   // 顶栏
   topbar: {
     crumbRoot: '待审',

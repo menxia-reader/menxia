@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://menxia-service.menxia-service.workers.dev; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="robots" content="noindex">
+<title>门下 · 登录回调</title>
+<link rel="stylesheet" href="src/style.css">
+</head>
+<body>
+<div id="root">
+  <section id="setup">
+    <div class="setup-card">
+      <div class="brand-row"><span class="seal">可</span><span class="brand">门下</span></div>
+      <p class="setup-lead" id="oauth-msg">正在完成登录…</p>
+      <div class="setup-actions"><a class="btn-ghost" id="oauth-back" href="./">返回门下</a></div>
+    </div>
+  </section>
+</div>
+<script type="module" src="src/oauth-callback.js"></script>
+</body>
+</html>
