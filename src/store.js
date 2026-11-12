@@ -15,10 +15,17 @@
 // 转发清单会不会随 github.js 增长而烂掉，由 test/store.test.js 的出口对账兜底
 // ——清单式配置必须自己对账，这是 BUILD_FILES 用血换来的仓规。
 import * as github from './github.js';
+import * as service from './service-api.js';
+import { getBackend } from './backend.js';
 
-let adapter = github;
+// M3c：按「数据源」设置在模块加载时二选一（GitHub 默认）。切换后 reload，不热切。
+let adapter = getBackend() === 'service' ? service : github;
 export const setAdapter = (a) => { adapter = a; };
 export const getAdapter = () => adapter;
+// 能力探测：门下适配器故意不导出 checkVerdict / markReady（无 CI、无 draft），
+// 消费层用它判断要不要露入口，而不是 `if (!api.x)`（转发函数恒存在，探不出来）。
+export const has = (name) => typeof adapter[name] === 'function';
+export const feature = (name) => adapter[name];
 
 const fwd = (name) => (...args) => adapter[name](...args);
 
@@ -52,6 +59,15 @@ export const submitReview = fwd('submitReview');
 export const createIssueComment = fwd('createIssueComment');
 export const updateIssueComment = fwd('updateIssueComment');
 export const putReadState = fwd('putReadState');
+
+// ── 门下服务独有（GitHub driver 没有；调用前先 has()）──
+export const login = fwd('login');
+export const logout = fwd('logout');
+export const isLoggedIn = fwd('isLoggedIn');
+export const enrichPR = fwd('enrichPR');
+export const markRead = fwd('markRead');
+export const pollEvents = fwd('pollEvents');
+export const rejectPR = fwd('rejectPR');
 
 // 错误类型静态直通：消费层不做 instanceof，只认形状（见上错误契约）
 export { ApiError } from './github.js';

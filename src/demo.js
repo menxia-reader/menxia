@@ -1,5 +1,6 @@
 // ?demo=1 —— 免 token 的演示/冒烟数据源：实现 App 用到的 api 子集，写操作只打 console。
 // 顺带是迁移后的永久冒烟靶：?demo=1&auto=1 会用真实事件路径自动划两条涂归。
+import { installServiceFake, runSvcSmoke } from './demo-service.js';
 
 const DOC = `# 涂归 demo 折
 
@@ -224,6 +225,11 @@ const ZONGPIS = [
   { id: 202, user: { login: 'charlie' }, created_at: new Date(Date.now() - 22e5).toISOString(), body: null },
   { id: 204, user: { login: 'agent-bot' }, created_at: new Date(Date.now() - 28e5).toISOString(), body: changelog('v3', '补齐数据来源') },
 ];
+
+// ?demo=1&svc=1：换成「门下服务」driver + 内存版假服务端（demo-service.js）。要在 ui 的 boot 之前装好，
+// 模块求值期就装：ui.js import demo.js 在前、render 在后。
+const SVC = new URLSearchParams(location.search).get('svc') === '1';
+if (SVC) installServiceFake({ DOC, DOC_OLD });
 
 // ?fail=401|403：让列表接口抛出 ApiError 形状，测消费层的分流（401 才清 token）
 const FAIL = new URLSearchParams(location.search).get('fail');
@@ -601,6 +607,13 @@ if (MOBILE === '1') {
 
 // 自动演示：用真实的 Selection + mouseup + 按钮点击走完「划句 → 存批」两轮
 export async function autoAnnotate(docEl) {
+  if (SVC) {   // ?demo=1&svc=1&auto=1：门下服务 driver 的冒烟（demo-service.js），标签 [svc]
+    try { await runSvcSmoke(docEl); } catch (err) {
+      console.log(`[svc] FAIL harness-exception — ${err && err.message}`);
+      console.log('[svc] RESULT pass=0 fail=1');
+    }
+    return;
+  }
   try { await runSmoke(docEl); } catch (err) {
     // 冒烟里任何一处抛错原本会让 RESULT 整个丢失（脚本静默结束）——兜住并自曝
     console.log(`[smoke] FAIL harness-exception — ${err && err.message}`);

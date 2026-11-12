@@ -60,7 +60,7 @@ run_page_once() {
   local pid=$!
   if [ "$budget" = "real" ]; then
     for _ in $(seq 1 90); do
-      grep -q '\[mm\] RESULT' "$log" 2>/dev/null && break
+      grep -qE '\[(mm|svc)\] RESULT' "$log" 2>/dev/null && break
       sleep 1
     done
   else
@@ -87,7 +87,7 @@ run_page() {
   for attempt in 1 2 3; do
     r0=$(grep -c '"GET ' "$LOGDIR/server.log" 2>/dev/null || true)
     run_page_once "$url" "$log" "$budget" "$winsize"
-    grep -qE '\[(dom|smoke|mobile|rail|mm)\] ' "$log" 2>/dev/null && return 0
+    grep -qE '\[(dom|smoke|mobile|rail|mm|svc)\] ' "$log" 2>/dev/null && return 0
     r1=$(grep -c '"GET ' "$LOGDIR/server.log" 2>/dev/null || true)
     echo "  ↻ ${url##*/} 页面零输出（第 ${attempt} 次，服务端收到 $((r1 - r0)) 个请求）——疑似虚拟时间在模块加载间隙耗尽"
   done
@@ -120,6 +120,7 @@ SMOKE_EXPECT=140
 MM_EXPECT=5
 MOBILE_EXPECT=33
 RAIL_EXPECT=10
+SVC_EXPECT=28
 
 WHAT="${1:-all}"
 STATUS=0
@@ -202,6 +203,21 @@ if [ "$WHAT" = "all" ] || [ "$WHAT" = "smoke" ]; then
   grep -o '\[mm\] [^"]*' "$LOGDIR/mm.log" | sed 's/^/  /' || true
   RMM=$(grep -o '\[mm\] RESULT pass=[0-9]* fail=[0-9]*' "$LOGDIR/mm.log" | tail -1)
   if [ "$RMM" = "[mm] RESULT pass=$MM_EXPECT fail=0" ]; then echo "  ✔ $RMM"; else echo "  ✖ ${RMM}（期望 pass=$MM_EXPECT fail=0）"; STATUS=1; fi
+fi
+
+# 门下服务 driver（M3c）：?svc=1 换成 service-api + 内存假服务端（src/demo-service.js），真时钟跑——
+# 判之后假 agent 用 setTimeout 推新版本、事件轮询等真实异步，虚拟时钟下节拍不可靠。
+# 链：登录回调(PKCE) → 列表 → 读折 → 呈 3 条涂归（原子批）→ 判 → 事件增量刷新 → 画可 → 登出。
+if [ "$WHAT" = "all" ] || [ "$WHAT" = "smoke" ] || [ "$WHAT" = "svc" ]; then
+  echo "── 门下服务 driver（OAuth 回调 → 清单 → 读折 → 原子批呈出 → 判 → 事件刷新 → 画可 → 登出）──"
+  run_page "http://127.0.0.1:$PORT/index.html?demo=1&svc=1&auto=1" "$LOGDIR/svc.log" real
+  grep -o '\[svc\] [^"]*' "$LOGDIR/svc.log" | sed 's/^/  /' || true
+  RSVC=$(grep -o '\[svc\] RESULT pass=[0-9]* fail=[0-9]*' "$LOGDIR/svc.log" | tail -1)
+  if [ -z "$RSVC" ]; then
+    echo "  ✖ 门下服务冒烟没跑出结果（详见 $LOGDIR/svc.log）"; STATUS=1
+  elif [ "$RSVC" = "[svc] RESULT pass=$SVC_EXPECT fail=0" ]; then echo "  ✔ $RSVC"
+  else echo "  ✖ ${RSVC}（期望 pass=$SVC_EXPECT fail=0）"; STATUS=1; fi
+  check_names svc "$LOGDIR/svc.log" test/svc-assertions.golden || STATUS=1
 fi
 
 exit $STATUS

@@ -43,6 +43,7 @@ import {
 import { matchAnchor } from './slug.js';
 import { S } from './strings.js';
 import { registerServiceWorker, hardUpdate } from './sw-register.js';
+import { getBackend, setBackend, nextBackend, isService } from './backend.js';
 import {
   isReadStateComment, parseReadState, shouldPromptJump,
   makeOutboxItem, enqueue, listOutbox, flushOutbox, putMeta, getMeta,
@@ -52,9 +53,15 @@ import {
 const params = new URLSearchParams(location.search);
 const DEMO = params.get('demo') === '1';
 const AUTO = params.get('auto') === '1';
+// ?demo=1&svc=1：demo 走「门下服务」driver（demo.js 拦 fetch 伪造服务端），而不是 demoApi 桩
+const SVC = params.get('svc') === '1';
 // 手机档判定，与 style.css 的 `@media (max-width: 900px)` 同一条线（JS 只在少数行为分叉处读它）
 const isPhone = () => typeof matchMedia === 'function' && matchMedia('(max-width: 900px)').matches;
-const api = DEMO ? demoApi : gh;
+const api = DEMO && !SVC ? demoApi : gh;
+// 能力探测：store 的转发函数恒存在，`if (!api.x)` 探不出 driver 有没有这个口（M3c）
+const feature = (name) => (api === gh ? gh.feature(name) : api[name]);
+const can = (name) => typeof feature(name) === 'function';
+const BACKEND = getBackend();
 // 外观：模块一加载就把存的档挂到 <html>，别等首帧渲完再切——深色用户会先闪一下白纸。
 // `?theme=light|dark` 只管本次会话（截图 / 冒烟用），不落盘；没带参数就读存的档。
 const THEME_PARAM = params.get('theme');
@@ -78,6 +85,7 @@ function deviceName() {
 // 新增源文件必须登记在这里，否则改了它不算「新版本」、用户手上会一直跑旧代码。
 // 子组件拆出去后曾漏登记，改 cards.js 不触发提示（2026-07-28 补）。
 const BUILD_FILES = ['index.html', 'src/style.css', 'src/ui.js', 'src/github.js', 'src/store.js', 'src/anchor.js',
+  'src/service-api.js', 'src/backend.js', 'src/oauth-callback.js', 'src/demo-service.js',
   'src/render.js', 'src/link.js', 'src/search.js', 'src/lang.js', 'src/demo.js', 'src/strings.js',
   'src/carry.js', 'src/mermaid.js',
   'src/components/cards.js', 'src/components/setup.js', 'src/components/sidebar.js',
@@ -310,16 +318,64 @@ function App() {
       if (adopted) setSetupMsg(S.setup.repoAdoptedFromLink(gh.getRepoSlug()));
       return;
     }
-    if (!gh.getRepoSlug()) { setPhase('setup'); setSetupMsg(S.setup.repoNowRequired); return; }
+    if (!gh.getRepoSlug() && !isService()) { setPhase('setup'); setSetupMsg(S.setup.repoNowRequired); return; }
     loadPRs();
   }, []);
+
+  // M3c 增量刷新（门下服务）：GET /events?since= 轮询 + 回到前台时查一次。
+  // 有本折的新版本 → 重开到 head 并提示；只有新评论/判 → 重拉批注串；别的折动了 → 刷清单。
+  const pollRef = useRef(null);
+  useEffect(() => {
+    if (!can('pollEvents')) return undefined;
+    const tick = async () => {
+      try {
+        const ev = await api.pollEvents();
+        if (!ev?.items?.length) return;
+        const c = R.current.cur;
+        const list = await loadPRs();
+        const mine = c ? ev.items.filter((e) => e.review_id === c.pr.number) : [];
+        if (!mine.length) { say(S.backend.eventsRefreshed(ev.items.length)); return; }
+        const fresh = (list || []).find((p) => p.number === c.pr.number);
+        if (fresh && fresh.head?.sha !== c.pr.head?.sha) {
+          openPR(fresh);
+          setTimeout(() => say(S.backend.newRevision(fresh.svc?.revision_no ?? '?')), 0);
+        } else {
+          loadComments(c.pr.number);
+        }
+      } catch { /* 轮询失败静默：下一轮再试，不打断阅读 */ }
+    };
+    pollRef.current = tick;
+    if (DEMO) window.__svcPoll = tick;   // 冒烟直接触发一轮，不等 60s
+    const first = setTimeout(tick, 1500);   // 开机先对齐游标（首轮只记 next_cursor，不当新事件）
+    const id = setInterval(tick, 60_000);
+    const onVis = () => { if (document.visibilityState === 'visible') tick(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { clearTimeout(first); clearInterval(id); document.removeEventListener('visibilitychange', onVis); };
+  }, []);
+
+  // 数据源切换 / 登录登出（M3c）。切换 reload：store 在加载时选 driver，整套状态按新源重算。
+  function switchBackend() {
+    const to = nextBackend(BACKEND);
+    if (!confirm(S.backend.switchConfirm(to))) return;
+    setBackend(to);
+    location.reload();
+  }
+  async function svcLogin() {
+    if (BACKEND !== 'service') setBackend('service');   // 从 GitHub 模式点「登录门下」：回调回来即是门下模式
+    try { await gh.login(); } catch (err) { say(S.backend.loginFailed(err?.message || err)); }
+  }
+  async function svcLogout() {
+    try { await gh.logout(); } catch { /* 本地已清 */ }
+    setCur(null); setPrs([]); setDonePrs([]);
+    setPhase('setup'); setSetupMsg(S.backend.loggedOut);
+  }
 
   // 并行取每折的体例检查结论。
   //
   // `unreadable`（钥匙缺 Actions: Read）**不逐折显示** —— 那会让 19 张卡同时打问号，
   // 是噪音不是信息。它是一次性的配置问题，出一条通知就够了。
   async function loadChecks(list) {
-    if (!api.checkVerdict) return;                       // demo 模式没有这个口
+    if (!can('checkVerdict')) return;                    // demo / 门下服务没有这个口（门下无 CI，红绿隐藏）
     const open = list.filter((p) => !p.merged_at && p.head?.sha);
     const got = await Promise.all(open.map(async (p) => {
       try { return [p.number, await api.checkVerdict(p.head.sha)]; }
@@ -433,6 +489,16 @@ function App() {
         const files = await api.listPRFiles(pr.number);
         if (R.current.cur?.pr.number !== pr.number) return; // 世界已变，丢弃
         const docs = files.filter(isDoc);
+        // 门下：清单项没有 summary/questions，开折后用详情补齐折子说明；并把这折标「已读」
+        if (can('enrichPR')) {
+          try {
+            const full = await api.enrichPR(pr);
+            if (R.current.cur?.pr.number !== pr.number) return;
+            pr = full;
+            setBodyOpen(hasDecisions(pr.body) && !isPhone());
+          } catch { /* 补不到就用清单项 */ }
+        }
+        if (can('markRead')) api.markRead(pr.number).catch(() => {});
         setCur({ pr, files, docs });
         if (!docs.length) setDocErr(S.doc.noMarkdown);
         else {
@@ -1203,8 +1269,15 @@ function App() {
     const hunks = new Map();
     (c.files || []).forEach((f) => hunks.set(f.filename, A.validRightLines(f.patch)));
     const inline = [], fallback = [];
+    // 门下服务：锚点以 quote 为准（line 只是提示），不做 hunk 校验；旧版本草稿照旧降成整单说明
+    const byQuote = Boolean(feature('anchorsByQuote'));
     ds.forEach((d) => {
       const stale = d.ref !== ref; // 旧版本草稿：行号可能漂移，宁降判不钉错行
+      if (byQuote) {
+        if (!stale && d.quote) inline.push({ path: d.path, line: d.line, side: 'RIGHT', body: A.fmtDraft(d), note: d.note, quote: d.quote });
+        else fallback.push(d);
+        return;
+      }
       const set = hunks.get(d.path);
       if (!stale && set && set.has(d.line)) inline.push({ path: d.path, line: d.line, side: 'RIGHT', body: A.fmtDraft(d) });
       else fallback.push(d);
@@ -1214,7 +1287,8 @@ function App() {
       : S.submit.inlineBody(inline.length); // body 恒非空：COMMENT 的 body 是文档必填项，不赌空串
     setBusy(true);
     try {
-      await api.submitReview(prNumber, { body, comments: inline, commitId: ref });
+      // fallbackBody：只有门下 driver 读（降级草稿作为一条无锚点整单评论同批呈出）；GitHub 忽略
+      await api.submitReview(prNumber, { body, comments: inline, commitId: ref, fallbackBody: fallback.length ? body : '' });
       A.saveDrafts(prNumber, []); // 直接清对应 key；内存只在世界没变时动
       if (R.current.cur?.pr.number === prNumber) setDrafts([]);
       loadComments(prNumber); // 重拉已呈串：让刚呈的立即出现在右缘（世界守卫在 loadComments 内）
@@ -1299,9 +1373,10 @@ function App() {
   // ── 视图 ──
   if (phase === 'boot') return null;
   if (phase === 'setup') return html`<${Setup} msg=${setupMsg} onSave=${onSaveToken}
-    canCancel=${Boolean(gh.getToken() && gh.getRepoSlug())}
+    service=${BACKEND === 'service'} onLogin=${svcLogin} onBackend=${switchBackend}
+    canCancel=${Boolean(gh.getToken() && (gh.getRepoSlug() || BACKEND === 'service'))}
     onCancel=${() => { setSetupMsg(''); setPhase('app'); if (!prs.length) loadPRs(); }}
-    onForget=${() => { gh.clearToken(); setSetupMsg(S.setup.tokenCleared); }} />`;
+    onForget=${() => { if (BACKEND === 'service') svcLogout(); else { gh.clearToken(); setSetupMsg(S.setup.tokenCleared); } }} />`;
 
   const docDrafts = drafts.filter((d) => d.path === docPath);
   const others = drafts.length - docDrafts.length;
@@ -1747,6 +1822,8 @@ function App() {
           moreOpen=${moreOpen} onMore=${() => setMoreOpen((o) => !o)}
           theme=${theme} onTheme=${() => { const t = nextTheme(theme); setThemeState(t); setTheme(t); applyTheme(t); }}
           style=${style} onStyle=${() => { const s = nextStyle(style); setStyleState(s); setStyle(s); applyStyle(s); }}
+          backend=${BACKEND} onBackend=${switchBackend}
+          loggedIn=${BACKEND === 'service' && Boolean(gh.getToken())} onLogin=${svcLogin} onLogout=${svcLogout}
           updating=${updating}
           onUpdate=${() => { setUpdating(true); say(S.stale.updating); hardUpdate([...BUILD_FILES, ...VENDOR_FILES]); }}
           onReadStep=${(i) => { const c = clampStep(i); setReadStepState(c); setReadStep(c); }}

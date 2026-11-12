@@ -4,12 +4,30 @@ import { html, useState, useRef } from '../../vendor/preact-standalone.mjs';
 import * as gh from '../store.js';
 import { S } from '../strings.js';
 
-export function Setup({ msg, onSave, canCancel, onCancel, onForget }) {
+export function Setup({ msg, onSave, canCancel, onCancel, onForget, service = false, onLogin, onBackend }) {
   const [preview, setPreview] = useState(gh.parseRepoSlug(gh.getRepoSlug()) || S.setup.repoPreviewFallback);
   const repoRef = useRef();
   const tokenRef = useRef();
   const submit = () => onSave(repoRef.current.value, tokenRef.current.value);
   const stored = gh.maskToken(gh.getToken());
+  // 门下服务模式（M3c）：没有仓库、没有 PAT，只有一颗「登录门下」（OAuth PKCE）。
+  if (service) {
+    return html`
+    <section id="setup" class="setup-service">
+      <div class="setup-card">
+        <div class="brand-row"><span class="seal">${S.brand.seal}</span><span class="brand">${S.brand.name}</span></div>
+        <p class="setup-lead">${S.backend.setupLead}</p>
+        <p class="setup-stored">${S.backend.setupNote}</p>
+        <div class="setup-actions">
+          <button class="btn-primary svc-login" onClick=${onLogin}>${S.backend.login}</button>
+          ${canCancel && html`<button class="btn-ghost" onClick=${onCancel}>${S.setup.back}</button>`}
+          ${canCancel && html`<button class="btn-ghost setup-forget" onClick=${onForget}>${S.backend.logout}</button>`}
+          ${onBackend && html`<button class="btn-ghost backend-btn" onClick=${onBackend}>${S.backend.useGithub}</button>`}
+          <span class=${'setup-msg' + (msg ? ' err' : '')}>${msg}</span>
+        </div>
+      </div>
+    </section>`;
+  }
   return html`
     <section id="setup">
       <div class="setup-card">
