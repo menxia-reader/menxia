@@ -1,6 +1,6 @@
 // 批注卡三件套：草稿卡 / 已呈批注串 / 判卡。
 // 从 ui.js 拆出（2026-07-28 还账：ui.js 破 800 行触发指标 #1）。纯展示，只吃 props。
-import { html, useEffect, useLayoutEffect, useRef } from '../../vendor/preact-standalone.mjs';
+import { html, useEffect, useLayoutEffect, useRef, useState } from '../../vendor/preact-standalone.mjs';
 import * as A from '../anchor.js';
 import { CommentBody } from './comment-body.js';
 import { S } from '../strings.js';
@@ -77,9 +77,34 @@ export function ShownThread({ t, blockLine, outdated, hydrate, onExpand }) {
 // 随视口宽、字号档（A±）、单双列断点一起动。在 CSS 里把那套居中数学再推一遍必然跟布局漂移；
 // 量一次 `#margin-col` 的实际矩形是唯一不会说谎的来源。窄屏单列时它自然量到整个正文宽，
 // 卡就横跨正文——那一档本来也没有右缘可贴。
-export function ZongpiCard({ busy, onSend, onClose }) {
+// 判框。门下服务模式下还承担「拍板」：questions（服务端 QuestionSchema：id/prompt/kind/options/required）
+// 渲成选项/自由文本，onSend(text, answers[]) 带结构化作答；verdict 决定标题与按钮字样
+// （request_changes=判 / approve=画可 / reject=关）。GitHub 模式 questions 恒空，长相与行为不变。
+export function ZongpiCard({ busy, onSend, onClose, questions = [], verdict = 'request_changes' }) {
   const taRef = useRef();
   const boxRef = useRef();
+  const [answers, setAnswers] = useState({});   // qid → { option_ids: [], text: '' }
+  const [qErr, setQErr] = useState('');
+  const ansOf = (q) => answers[q.id] || { option_ids: [], text: '' };
+  const toggle = (q, oid) => setAnswers((a) => {
+    const cur = ansOf(q).option_ids;
+    const next = q.kind === 'single_choice' ? [oid] : (cur.includes(oid) ? cur.filter((x) => x !== oid) : [...cur, oid]);
+    return { ...a, [q.id]: { ...ansOf(q), option_ids: next } };
+  });
+  const setText = (q, text) => setAnswers((a) => ({ ...a, [q.id]: { ...ansOf(q), text } }));
+  const send = () => {
+    const out = [];
+    for (const q of questions) {
+      const a = ansOf(q);
+      const empty = q.kind === 'free_text' ? !a.text.trim() : !a.option_ids.length;
+      if (empty) { if (q.required !== false) { setQErr(S.decision.answerRequired(q.prompt)); return; } continue; }
+      out.push(q.kind === 'free_text' ? { question_id: q.id, text: a.text.trim() } : { question_id: q.id, option_ids: a.option_ids });
+    }
+    setQErr('');
+    onSend(taRef.current.value, out);
+  };
+  const header = verdict === 'approve' ? S.decision.approveHeader : verdict === 'reject' ? S.decision.rejectHeader : S.card.zongpiHeader;
+  const sendLabel = verdict === 'approve' ? S.decision.approveSend : verdict === 'reject' ? S.decision.rejectSend : S.action.sendZongpi;
 
   // useLayoutEffect 而不是 useEffect：量位置必须赶在**这一帧绘制之前**。
   // 用 useEffect 的话第一帧会拿 `.anno-card` 的 `left:0; width:100%` 去画一张 fixed 卡，
@@ -106,12 +131,29 @@ export function ZongpiCard({ busy, onSend, onClose }) {
   }, []);
 
   return html`
-    <div class="anno-card zongpi-card" ref=${boxRef}>
-      <div class="anno-src">${S.card.zongpiHeader}</div>
-      <textarea class="anno-input" ref=${taRef} rows="4" placeholder=${S.card.zongpiPlaceholder}></textarea>
+    <div class=${'anno-card zongpi-card' + (verdict !== 'request_changes' ? ` verdict-${verdict}` : '')} ref=${boxRef}>
+      <div class="anno-src">${header}</div>
+      ${questions.length > 0 && html`
+        <div class="decision-questions">
+          ${questions.map((q) => html`
+            <fieldset class="decision-q" key=${q.id} data-qid=${q.id}>
+              <legend>${q.prompt}${q.required === false ? S.decision.optional : ''}</legend>
+              ${q.kind === 'free_text'
+                ? html`<input class="decision-text" type="text" maxlength="4000" value=${ansOf(q).text}
+                    onInput=${(e) => setText(q, e.target.value)} />`
+                : (q.options || []).map((o) => html`
+                  <label class="decision-opt" key=${o.id}>
+                    <input type=${q.kind === 'single_choice' ? 'radio' : 'checkbox'} name=${`q-${q.id}`} value=${o.id}
+                      checked=${ansOf(q).option_ids.includes(o.id)} onChange=${() => toggle(q, o.id)} />
+                    <span>${o.label}</span>
+                  </label>`)}
+            </fieldset>`)}
+          ${qErr && html`<div class="decision-err">${qErr}</div>`}
+        </div>`}
+      <textarea class="anno-input" ref=${taRef} rows="4" placeholder=${verdict === 'request_changes' ? S.card.zongpiPlaceholder : S.decision.notePlaceholder}></textarea>
       <div class="anno-row">
         <button class="anno-ghost" onMouseDown=${(e) => e.preventDefault()} onClick=${onClose}>${S.action.discard}</button>
-        <button class="anno-save" onMouseDown=${(e) => e.preventDefault()} onClick=${() => onSend(taRef.current.value)}>${busy ? S.action.sending : S.action.sendZongpi}</button>
+        <button class="anno-save" onMouseDown=${(e) => e.preventDefault()} onClick=${send}>${busy ? S.action.sending : sendLabel}</button>
       </div>
     </div>`;
 }

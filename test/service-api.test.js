@@ -241,6 +241,21 @@ test('mergePR（画可）：decisions approve 带 revision_no；读物随手 PUT
   assert.equal(calls.length, 3);
 });
 
+test('answers[]：判 / 画可 / 关 都按 openapi 带 answers（有才带）；rejectPR = verdict reject', async () => {
+  const answers = [{ question_id: 'q1', option_ids: ['a'] }, { question_id: 'q2', text: '随手一句' }];
+  stubFetch((url, opts, n) => {
+    if (n === 1) return res(200, REVIEW);
+    assert.deepEqual(JSON.parse(opts.body), { revision_no: 2, verdict: 'request_changes', note: '改', answers });
+    return res(201, { id: 'd1' });
+  });
+  await svc.createIssueComment(REVIEW.id, '改', { answers });
+  stubFetch((url, opts) => { assert.deepEqual(JSON.parse(opts.body), { revision_no: 2, verdict: 'approve', note: '好', answers }); return res(201, { id: 'd2' }); });
+  await svc.mergePR('rv_q', 'rv_q@2', { answers, note: '好' });
+  stubFetch((url, opts) => { assert.match(url, /\/decisions$/); assert.deepEqual(JSON.parse(opts.body), { revision_no: 2, verdict: 'reject' }); return res(201, { id: 'd3' }); });
+  await svc.rejectPR('rv_q', 'rv_q@2', { answers: [] });
+  assert.deepEqual(svc.toPR(REVIEW).svc.questions, REVIEW.questions);
+});
+
 test('read-state：get 翻成 {id, state:{docPath,anchor,time}}；put 只送 position（保留 state）；markRead 只在 unread 时写一次', async () => {
   stubFetch(() => res(200, { state: 'read', position: { document_path: 'docs/a.md', anchor: 'L20', device: 'mac', time: 'T' }, updated_at: 'U' }));
   assert.deepEqual(await svc.getReadState('rv_x'), { id: 'svc', state: { device: 'mac', docPath: 'docs/a.md', anchor: 'L20', time: 'T', v: 1 } });

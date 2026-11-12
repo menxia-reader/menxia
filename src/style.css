@@ -1604,3 +1604,13 @@ html[data-style="c"] .dash-h { font-family: var(--sans); font-weight: 600; font-
 html[data-style="c"] .dash-row { padding: 7px 8px; border-radius: 4px; }
 html[data-style="c"] .dash-row.active { background: var(--chip); }
 html[data-style="c"] .dash-row.active::before { display: none; }
+
+/* 判框里的「待你拍板」作答（门下服务，M3c 缺口 1）：题干 + 单选/多选/自由文本，紧凑排在正文框之上 */
+.decision-questions { margin: 0 0 .5rem; display: grid; gap: .4rem; }
+.decision-q { border: 1px solid var(--line, #ddd); border-radius: 6px; padding: .35rem .6rem .45rem; margin: 0; min-width: 0; }
+.decision-q legend { font-size: .85em; opacity: .85; padding: 0 .3rem; }
+.decision-opt { display: inline-flex; align-items: center; gap: .3rem; margin: .15rem .9rem .15rem 0; font-size: .92em; cursor: pointer; }
+.decision-text { width: 100%; box-sizing: border-box; font: inherit; font-size: .92em; padding: .25rem .4rem; }
+.decision-err { color: var(--err, #b3261e); font-size: .85em; margin-top: .2rem; }
+.zongpi-card.verdict-approve .anno-src { font-weight: 600; }
+.zongpi-card.verdict-reject .anno-src { font-weight: 600; }

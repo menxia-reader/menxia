@@ -270,6 +270,7 @@ export function toPR(r) {
     svc: {
       status: r.status, role: r.role, is_decider: r.is_decider, read_state: r.read_state || null,
       revision_no: r.current_revision_no, unread: r.read_state?.state === 'unread' || !r.read_state?.state,
+      questions: Array.isArray(r.questions) ? r.questions : [],
     },
   };
 }
@@ -418,12 +419,15 @@ export async function submitReview(id, payload) {
 // ───────────────────────── 判 / 画可 ─────────────────────────
 // 判 = 带结论的决定 request_changes + note（agent 只认 verdict，note 是参考）。
 // 结案折（approved/rejected/withdrawn）或本人不是 decider → 退成无锚点的整单评论。
-export async function createIssueComment(id, body) {
+// answers[]（{question_id, option_ids?|text}）来自判框按 review.questions 的作答（服务端必答校验）。
+const withAnswers = (body, answers) => (Array.isArray(answers) && answers.length ? { ...body, answers } : body);
+export async function createIssueComment(id, body, { answers } = {}) {
   const d = await getDetail(id, { fresh: true });
   const closed = !OPEN_STATUSES.has(d.status);
   if (!closed && d.is_decider !== false) {
     try {
-      const dec = await post(`/reviews/${encodeURIComponent(id)}/decisions`, { revision_no: d.current_revision_no, verdict: 'request_changes', note: body });
+      const dec = await post(`/reviews/${encodeURIComponent(id)}/decisions`,
+        withAnswers({ revision_no: d.current_revision_no, verdict: 'request_changes', note: body }, answers));
       details.delete(id);
       return { id: dec?.id, kind: 'decision' };
     } catch (err) {
@@ -438,9 +442,10 @@ export const updateIssueComment = async () => { throw new Error('门下服务不
 
 // 画可 = approve；带 revision_no（= GitHub sha）：agent 中途推了新版 → 409 stale_revision。
 // 读物（kind:读物）画可同时标「读完」——GitHub 侧 isReadDone 是从「读物且已 merge」推的，门下用显式状态。
-export async function mergePR(id, ref) {
+export async function mergePR(id, ref, { answers, note } = {}) {
   const { no } = parseRef(ref);
-  const res = await post(`/reviews/${encodeURIComponent(id)}/decisions`, { revision_no: no, verdict: 'approve' });
+  const res = await post(`/reviews/${encodeURIComponent(id)}/decisions`,
+    withAnswers({ revision_no: no, verdict: 'approve', ...(note ? { note } : {}) }, answers));
   const d = details.get(id)?.data;
   details.delete(id);
   if ((d?.labels || []).includes('kind:读物')) {
@@ -449,9 +454,19 @@ export async function mergePR(id, ref) {
   return res;
 }
 
-// 关 / 不留（网页现无按钮；留出口给将来）
-export const rejectPR = (id, ref) =>
-  post(`/reviews/${encodeURIComponent(id)}/decisions`, { revision_no: parseRef(ref).no, verdict: 'reject' });
+// 关 / 不留 = reject（结案不合）；同样带 revision_no 与必答 answers
+export async function rejectPR(id, ref, { answers, note } = {}) {
+  const res = await post(`/reviews/${encodeURIComponent(id)}/decisions`,
+    withAnswers({ revision_no: parseRef(ref).no, verdict: 'reject', ...(note ? { note } : {}) }, answers));
+  details.delete(id);
+  return res;
+}
+
+/** 这折要人答的问题（服务端 QuestionSchema）；清单项没有，详情才有——从缓存拿，没有就拉。 */
+export async function questionsOf(id) {
+  const d = details.get(id)?.data || await getDetail(id);
+  return Array.isArray(d?.questions) ? d.questions : [];
+}
 
 // ───────────────────────── 阅读状态 / 续读位置 ─────────────────────────
 const putState = (id, body) => post(`/reviews/${encodeURIComponent(id)}/read-state`, body, 'PUT');

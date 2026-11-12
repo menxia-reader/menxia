@@ -174,6 +174,9 @@ function App() {
   const [drafts, setDrafts] = useState([]);
   const [editing, setEditing] = useState(null);
   const [zongpi, setZongpi] = useState(false);
+  // 判框的用途：null=判（request_changes）/ 'approve'=画可 / 'reject'=关。门下折带 questions 时，
+  // 画可与关也要先答题，所以复用同一张卡（M3c 缺口 1/2）。GitHub 模式恒 null。
+  const [verdictMode, setVerdictMode] = useState(null);
   const [busy, setBusy] = useState(false);
   const [float, setFloat] = useState(null);      // pendingAnchor
   const [commits, setCommits] = useState([]);    // rev 序列 v1..vN（vN=head）
@@ -234,7 +237,8 @@ function App() {
   // headSha / viewedRef 入镜：全局 mouseup 要据此判定「旧版只读 → 不出浮批」
   const headSha = cur?.pr?.head?.sha || null;
   const onHead = !viewed || viewed === headSha;
-  const archived = Boolean(cur?.pr?.merged_at);
+  // 已画可（merged_at）或已关/撤回（closed_at，门下 reject/withdraw）都是归档只读
+  const archived = Boolean(cur?.pr?.merged_at || cur?.pr?.closed_at);
   const canAnnotate = onHead && !archived && !readThrough; // 旧版 / 归档 / 通读一律只读（通读拼全书，行号跨章会撞）
   const happyUrl = parseHappySession(cur?.pr?.body);   // 呈折的那次奏对（agent 埋在 PR body 里）
   R.current = { cur, drafts, editing, busy, float, docPath, viewed, headSha, onHead, archived, canAnnotate, viewThread, zoomImg, prs, donePrs, dash };
@@ -541,7 +545,7 @@ function App() {
 
   // 打开折时读远端续读位置：比本地新且落点不同才给「跳到上次位置?」提示条（点了才跳，绝不自动）。
   async function loadReadState(prNumber) {
-    if (DEMO || !gh.getReadState) return;
+    if ((DEMO && !SVC) || !gh.getReadState) return;   // demo 桩没有续读；?svc=1 的假服务端有
     try {
       const rs = await gh.getReadState(prNumber);
       readStateId.current = rs?.id ?? null;
@@ -571,7 +575,7 @@ function App() {
   // 本地 meta 时间无条件更新（跨设备 last-write-wins 的本地基准）。断网时本地照存，联网后自然被下次滚动覆盖。
   const lastRS = useRef({ line: null, at: 0 });
   function recordReadState() {
-    if (DEMO || !gh.putReadState) return;
+    if ((DEMO && !SVC) || !gh.putReadState) return;
     const c = R.current.cur;
     const path = R.current.docPath;
     if (!c || !path) return;
@@ -1301,13 +1305,20 @@ function App() {
   }
   submitRef.current = submitAll;
 
-  async function sendZongpi(text) {
+  // 这折要答的题（门下详情里的 questions；GitHub 恒空）
+  const svcQuestions = cur?.pr?.svc?.questions || [];
+
+  async function sendZongpi(text, answers = []) {
     const c = R.current.cur;
     const v = text.trim();
-    if (!c || !v || R.current.busy) return;
+    if (!c || R.current.busy) return;
+    // 画可 / 关 走判框作答后到这里：note 可空，题答在 answers 里
+    if (verdictMode === 'approve') { setZongpi(false); setVerdictMode(null); return doApprove(c.pr, { answers, note: v }); }
+    if (verdictMode === 'reject') { setZongpi(false); setVerdictMode(null); return doReject(c.pr, { answers, note: v }); }
+    if (!v) return;
     setBusy(true);
     try {
-      await api.createIssueComment(c.pr.number, v);
+      await api.createIssueComment(c.pr.number, v, { answers });
       setZongpi(false);
       loadComments(c.pr.number); // 重拉：让刚呈的判立刻显示在折首
       setZongpiOpen(true);       // 折叠组默认收起，自己刚发的那条必须展开给他看见——否则回到「只能发不能看」
@@ -1336,14 +1347,21 @@ function App() {
     const pr = c.pr;
     const pending = R.current.drafts.length;
     const warn = pending ? S.merge.pendingDraftsWarn(pending) : '';
+    // 门下折带「待你拍板」：先答题再画可——打开判框的画可态，答完由 sendZongpi → doApprove
+    if ((pr.svc?.questions || []).length) { setVerdictMode('approve'); setZongpi(true); return; }
     if (!confirm(S.merge.confirm(pr.number, pr.title, warn))) return;
+    await doApprove(pr);
+  }
+
+  async function doApprove(pr, { answers, note } = {}) {
     setBusy(true);
     try {
       if (pr.draft) {
         await api.markReady(pr.node_id);
         pr.draft = false; // 本地同步：merge 失败重试不再重打 markReady
       }
-      await api.mergePR(pr.number, pr.head.sha); // 带 sha：agent 中途推新版则 409，所批即所合
+      // 带 sha：agent 中途推新版则 409，所批即所合。第三参只有门下 driver 读（answers/note）；GitHub 忽略
+      await api.mergePR(pr.number, pr.head.sha, { answers, note });
       // 画可是「结束一件事」，不是「开始下一件事」：人不动、折不换，就地转只读。
       // 滚动位置和选中的文字都留着，他要复制什么复制完再自己踩「下一折」。
       // 本地补 merged_at 让 archived 当场为真（画可按钮、涂归入口随之关掉），不等清单回来；
@@ -1363,6 +1381,44 @@ function App() {
       say(S.merge.failed(err.message, pr.draft, pr.number));
     } finally {
       setBusy(false);
+    }
+  }
+
+  // ── 关（reject，门下）：结案不合。带题先答题（判框 reject 态），否则确认框直接发。
+  function rejectFolder() {
+    const c = R.current.cur;
+    if (!c || R.current.archived || !can('rejectPR')) return;
+    if (!R.current.onHead) return say(S.merge.oldRevBlocked);
+    if ((c.pr.svc?.questions || []).length) { setVerdictMode('reject'); setZongpi(true); setMoreOpen(false); return; }
+    if (!confirm(S.decision.rejectConfirm(c.pr.number, c.pr.title))) return;
+    doReject(c.pr);
+  }
+  async function doReject(pr, { answers, note } = {}) {
+    setBusy(true); setMoreOpen(false);
+    try {
+      await api.rejectPR(pr.number, pr.head.sha, { answers, note });
+      // 与画可同款：就地转只读（closed_at → archived），不换折
+      setCur((c) => (c && c.pr.number === pr.number ? { ...c, pr: { ...c.pr, closed_at: new Date().toISOString() } } : c));
+      await loadPRs();
+      say(S.decision.rejectDone(pr.number));
+    } catch (err) {
+      say(S.decision.rejectFailed(err.message));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ── 留（shelved，门下）：阅读状态显式标 shelved（GitHub 侧是从 wait: 标签推的）。
+  async function shelveFolder() {
+    const c = R.current.cur;
+    if (!c || !can('markShelved')) return;
+    setMoreOpen(false);
+    if (!confirm(S.decision.shelveConfirm(c.pr.number, c.pr.title))) return;
+    try {
+      await api.markShelved(c.pr.number);
+      say(S.decision.shelveDone(c.pr.number));
+    } catch (err) {
+      say(S.decision.shelveFailed(err.message));
     }
   }
 
@@ -1828,7 +1884,8 @@ function App() {
           onUpdate=${() => { setUpdating(true); say(S.stale.updating); hardUpdate([...BUILD_FILES, ...VENDOR_FILES]); }}
           onReadStep=${(i) => { const c = clampStep(i); setReadStepState(c); setReadStep(c); }}
           onRefresh=${() => { setCur(null); setDocPath(null); loadPRs(); }}
-          onCopyRef=${copyRef} onCarry=${carryOut} onZongpi=${() => setZongpi((z) => !z)}
+          onCopyRef=${copyRef} onCarry=${carryOut} onZongpi=${() => { setVerdictMode(null); setZongpi((z) => !z); }}
+          onReject=${can('rejectPR') ? rejectFolder : null} onShelve=${can('markShelved') ? shelveFolder : null}
           onSubmit=${submitAll} onQinci=${qinci} />
         ${dash && html`
           <${Dashboard} prs=${prs} donePrs=${donePrs} cur=${cur} timeAgo=${timeAgo}
@@ -1916,7 +1973,8 @@ function App() {
             ${docErr ? html`<article id="doc"><p class="state err">${docErr}</p></article>`
               : html`<article id="doc" key="doc-island" ref=${docRef}></article>`}
             <div id="margin-col" class="margin-col">
-              ${zongpi && html`<${ZongpiCard} busy=${busy} onSend=${sendZongpi} onClose=${() => setZongpi(false)} />`}
+              ${zongpi && html`<${ZongpiCard} busy=${busy} onSend=${sendZongpi} questions=${svcQuestions}
+                verdict=${verdictMode || 'request_changes'} onClose=${() => { setZongpi(false); setVerdictMode(null); }} />`}
               ${marginItems.map((m) => m.el)}
               ${others > 0 && html`<p class="margin-note">${S.margin.otherDocs(others)}</p>`}
             </div>

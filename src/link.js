@@ -71,8 +71,8 @@ export function parseDeepLink(search) {
   }
   const pr = q.get('pr');
   if (!pr) return null;
-  const prNumber = parseInt(pr, 10);
-  if (!Number.isFinite(prNumber) || prNumber <= 0) return null;
+  const prNumber = parseFolderId(pr);
+  if (prNumber == null) return null;
   const line = parseInt(q.get('line') || '', 10);
   return {
     repo: validRepo(q.get('repo')),
@@ -80,6 +80,17 @@ export function parseDeepLink(search) {
     path: q.get('path') || null,
     line: Number.isFinite(line) && line > 0 ? line : null,
   };
+}
+
+// 折号两种形态并存（M3c）：GitHub 模式是 PR 整数号；门下服务模式是 review id `rv_` + 26 位 Crockford
+// base32（与 openapi 的 review_id pattern 同）。字符串原样返回，整数转 number；别的一律 null。
+export const REVIEW_ID_RE = /^rv_[0-9A-Z]{26}$/;
+export function parseFolderId(s) {
+  const v = String(s ?? '').trim();
+  if (REVIEW_ID_RE.test(v)) return v;
+  if (!/^\d+$/.test(v)) return null;
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 // owner/repo 的字面校验（GitHub 允许的就这些字符）。烂值一律当「没带仓」而不是让整条链变 null——
