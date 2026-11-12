@@ -1,3 +1,5 @@
+svc-approve-answers-sent
+svc-approve-opens-questions
 svc-approve-posted
 svc-approve-revision-no
 svc-archived-readonly
@@ -10,8 +12,10 @@ svc-doc-rendered
 svc-events-cursor-advanced
 svc-events-notice
 svc-events-reopen-head
+svc-judge-answers-sent
 svc-judge-editor-open
 svc-judge-is-request-changes
+svc-judge-requires-answer
 svc-judge-revision-no
 svc-judge-shown-in-thread
 svc-list-shows-review
@@ -21,6 +25,10 @@ svc-login-token-rotated
 svc-logout-revokes-grant
 svc-no-ci-badge
 svc-open-marks-read
+svc-readstate-position-put
+svc-resume-bar-shown
+svc-resume-jump-scrolls
+svc-shelve-put
 svc-shown-threads-reloaded
 svc-status-approved
 svc-status-changes-requested

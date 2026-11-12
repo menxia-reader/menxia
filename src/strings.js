@@ -89,6 +89,27 @@ export const S = deepFreeze({
     eventsRefreshed: (n) => `门下有 ${n} 条新动态，清单已刷新。`,
   },
 
+  // 拍板（门下服务）：判框里按 questions 作答；画可 / 关 / 留
+  decision: {
+    approveHeader: '画可 · 定稿前先答「待你拍板」',
+    rejectHeader: '关 · 不留此折（结案，不合）',
+    approveSend: '画 可',
+    rejectSend: '关',
+    notePlaceholder: '给 agent 的话（可空）',
+    optional: '（可不答）',
+    answerRequired: (prompt) => `还没答：「${prompt}」`,
+    reject: '关（不留）',
+    rejectTitle: '结案不合：agent 收到 reject，这折归档为「关」',
+    rejectConfirm: (n, title) => `关掉 #${n}「${title}」？这折结案不合，agent 会收到 reject。`,
+    rejectDone: (n) => `已关：#${n} 结案不合。`,
+    rejectFailed: (msg) => `关失败：${msg}`,
+    shelve: '留',
+    shelveTitle: '留着以后读：阅读状态标 shelved，清单里挪到读毕书架',
+    shelveConfirm: (n, title) => `把 #${n}「${title}」留着以后读？`,
+    shelveDone: (n) => `已留：#${n} 标为 shelved。`,
+    shelveFailed: (msg) => `留失败：${msg}`,
+  },
+
   // 顶栏
   topbar: {
     crumbRoot: '待审',

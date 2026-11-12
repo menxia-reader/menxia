@@ -17,7 +17,8 @@ export const state = {
   tokens: { access: 'demo-access-1', refresh: 'demo-refresh-1' },
   challenge: null, pkceOk: null, loggedOut: false,
   review: null, revisions: [], comments: [], decisions: [], events: [],
-  readState: { state: 'unread', position: null, updated_at: null, has_new_activity: true },
+  // 续读位置预埋「别的设备读到 L30」：开折该出「跳到上次位置?」条（不自动跳）
+  readState: { state: 'unread', position: { document_path: 'docs/demo.md', anchor: 'L30', device: 'ipad', time: now() }, updated_at: now(), has_new_activity: true },
   batches: [], contentHits: [],
 };
 
@@ -29,7 +30,11 @@ function seed({ DOC, DOC_OLD }) {
   state.review = {
     id: RID, title: '门下服务 demo 折', summary: '走门下服务的演示折：涂归、判、画可全写回内存版服务。',
     status: 'open', labels: ['proj:menxia', 'kind:设计', 'wait:你拍'],
-    questions: [{ id: 'q1', text: '先改哪头？', options: [{ id: 'a', label: '开头' }, { id: 'b', label: '结尾' }] }],
+    // 服务端 QuestionSchema 原样：id/prompt/kind/options/required
+    questions: [
+      { id: 'q1', prompt: '先改哪头？', kind: 'single_choice', options: [{ id: 'a', label: '开头' }, { id: 'b', label: '结尾' }], required: true },
+      { id: 'q2', prompt: '还有什么要交代', kind: 'free_text', required: false },
+    ],
     decision_options: ['approve', 'request_changes', 'reject'],
     owner: { id: 'u1', display_name: 'charlie' }, decider: { id: 'u1', display_name: 'charlie' },
     role: 'owner', is_owner: true, is_decider: true, source_agent: 'hermes',
@@ -157,7 +162,20 @@ async function handle(url, init) {
     if (!['open', 'changes_requested'].includes(state.review.status)) return ERR(409, 'review_closed');
     if (b.revision_no !== cur().revision_no) return ERR(409, 'stale_revision');
     if (b.verdict === 'approve' && state.review.status === 'changes_requested') return ERR(409, 'conflict', 'changes_requested 上不能直接 approve，须等新版本');
-    const d = { id: `d${state.decisions.length + 1}`, revision_no: b.revision_no, verdict: b.verdict, answers: b.answers || [], note: b.note || null, decider: { display_name: 'charlie' }, created_at: now() };
+    // 必答校验，与 services/reviews.ts createDecision 同判据
+    const answers = b.answers || [];
+    for (const qd of state.review.questions) {
+      const a = answers.find((x) => x.question_id === qd.id);
+      if ((qd.required ?? true) && !a) return ERR(400, 'invalid_argument', `question ${qd.id} requires an answer`);
+      if (a && qd.kind !== 'free_text') {
+        const ids = new Set((qd.options || []).map((o) => o.id));
+        if ((a.option_ids || []).some((o) => !ids.has(o))) return ERR(400, 'invalid_argument', `unknown option for ${qd.id}`);
+        if (qd.kind === 'single_choice' && (a.option_ids || []).length > 1) return ERR(400, 'invalid_argument', `${qd.id} is single_choice`);
+      }
+      if (a && qd.kind === 'free_text' && (a.option_ids || []).length) return ERR(400, 'invalid_argument', `${qd.id} takes no option_ids`);
+    }
+    if (answers.some((a) => !state.review.questions.some((qd) => qd.id === a.question_id))) return ERR(400, 'invalid_argument', 'unknown question');
+    const d = { id: `d${state.decisions.length + 1}`, revision_no: b.revision_no, verdict: b.verdict, answers, note: b.note || null, decider: { display_name: 'charlie' }, created_at: now() };
     state.decisions.push(d);
     event('decision.created', d.id, { verdict: d.verdict });
     const next = { approve: 'approved', request_changes: 'changes_requested', reject: 'rejected' }[b.verdict];
@@ -241,6 +259,7 @@ export async function runSvcSmoke(docEl) {
   };
 
   await sleep(300);
+  window.confirm = () => true;   // headless 默认 dismiss 掉 confirm；留 / 画可的确认框都要点「是」
   // ① 登录回调：真 PKCE——授权 URL 里的 challenge 交给假服务端，exchangeCode 的 verifier 必须对得上
   const u = new URL(await buildAuthorizeUrl());
   state.challenge = u.searchParams.get('code_challenge');
@@ -257,6 +276,20 @@ export async function runSvcSmoke(docEl) {
   chk('svc-doc-rendered', docEl.querySelectorAll('[data-line]').length > 10, `blocks=${docEl.querySelectorAll('[data-line]').length}`);
   chk('svc-open-marks-read', state.readState.state === 'read', `state=${state.readState.state}`);
   chk('svc-no-ci-badge', !document.querySelector('.check-badge, .check-fail, .check-pass'));
+
+  // ②b 续读位置：远端（别的设备）读到 L30 → 出提示条不自动跳；点了才跳；滚动后把新位置 PUT 回去
+  const jumpGo = await waitFor(() => document.querySelector('.offline-jump .offline-jump-go'));
+  chk('svc-resume-bar-shown', Boolean(jumpGo));
+  const work = document.querySelector('.work');
+  const y0 = work?.scrollTop ?? 0;
+  jumpGo?.click();
+  chk('svc-resume-jump-scrolls', Boolean(await waitFor(() => (work?.scrollTop ?? 0) > y0 + 50)), `y0=${y0} y=${work?.scrollTop}`);
+  const pos = await waitFor(() => (state.readState.position?.device !== 'ipad' ? state.readState.position : null), 4000);
+  chk('svc-readstate-position-put', Boolean(pos) && pos.document_path === 'docs/demo.md' && /^L\d+$/.test(pos.anchor || ''), JSON.stringify(pos));
+
+  // ②c 留：⋯ 菜单「留」→ read-state shelved
+  document.querySelector('.shelve-btn')?.click();
+  chk('svc-shelve-put', Boolean(await waitFor(() => state.readState.state === 'shelved')), `state=${state.readState.state}`);
 
   // ③ 呈出 3 条涂归 = 一次原子批
   const picked = [
@@ -287,10 +320,18 @@ export async function runSvcSmoke(docEl) {
   if (ta) {
     ta.value = '开头先改，结尾留着。';
     ta.dispatchEvent(new Event('input', { bubbles: true }));
+    // 必答题没答就呈：判框自己拦下并提示，不打服务端
+    [...document.querySelectorAll('.anno-save')].pop()?.click();
+    chk('svc-judge-requires-answer', Boolean(await waitFor(() => document.querySelector('.decision-err'))) && state.decisions.length === 0);
+    document.querySelector('.decision-q[data-qid="q1"] input[value="a"]')?.click();
+    const ft = document.querySelector('.decision-q[data-qid="q2"] .decision-text');
+    if (ft) { ft.value = '标题也顺手改短'; ft.dispatchEvent(new Event('input', { bubbles: true })); }
+    await sleep(60);
     [...document.querySelectorAll('.anno-save')].pop()?.click();
   }
   const d1 = await waitFor(() => state.decisions[0]);
   chk('svc-judge-is-request-changes', d1?.verdict === 'request_changes' && d1?.note === '开头先改，结尾留着。', JSON.stringify(d1));
+  chk('svc-judge-answers-sent', JSON.stringify(d1?.answers) === JSON.stringify([{ question_id: 'q1', option_ids: ['a'] }, { question_id: 'q2', text: '标题也顺手改短' }]), JSON.stringify(d1?.answers));
   chk('svc-judge-revision-no', d1?.revision_no === 2);
   chk('svc-status-changes-requested', state.review.status === 'changes_requested' || state.revisions.length === 3, state.review.status);
   chk('svc-judge-shown-in-thread', Boolean(await waitFor(() => document.body.textContent.includes('开头先改，结尾留着。'))));
@@ -303,12 +344,17 @@ export async function runSvcSmoke(docEl) {
   chk('svc-events-cursor-advanced', localStorage.getItem('menxia.svc.events') === String(state.events.length), `cur=${localStorage.getItem('menxia.svc.events')} n=${state.events.length}`);
   chk('svc-events-notice', Boolean(await waitFor(() => /v3/.test(document.querySelector('.notice')?.textContent || ''))), document.querySelector('.notice')?.textContent);
 
-  // ⑥ 画可 = approve 带 revision_no=3（所批即所合）
-  window.confirm = () => true;
+  // ⑥ 画可 = approve 带 revision_no=3（所批即所合）；这折带题，画可先走判框答题
   const qinci = await waitFor(() => document.querySelector('.btn-qinci:not([disabled])'));
   qinci?.click();
+  const approveCard = await waitFor(() => document.querySelector('.zongpi-card.verdict-approve'));
+  chk('svc-approve-opens-questions', Boolean(approveCard) && Boolean(approveCard?.querySelector('.decision-q[data-qid="q1"]')));
+  approveCard?.querySelector('.decision-q[data-qid="q1"] input[value="b"]')?.click();
+  await sleep(60);
+  [...document.querySelectorAll('.anno-save')].pop()?.click();
   const ap = await waitFor(() => state.decisions.find((d) => d.verdict === 'approve'));
   chk('svc-approve-posted', Boolean(ap));
+  chk('svc-approve-answers-sent', JSON.stringify(ap?.answers) === JSON.stringify([{ question_id: 'q1', option_ids: ['b'] }]), JSON.stringify(ap?.answers));
   chk('svc-approve-revision-no', ap?.revision_no === 3, `rev=${ap?.revision_no}`);
   chk('svc-status-approved', state.review.status === 'approved', state.review.status);
   chk('svc-archived-readonly', Boolean(await waitFor(() => !document.querySelector('.btn-qinci'))));

@@ -14,7 +14,7 @@ export function Topbar({
   readStep = 1, onReadStep, widthPreset = 'fill', onWidthPreset, moreOpen = false, onMore, onUpdate, updating = false,
   theme = 'auto', onTheme, style = 'b', onStyle,
   backend = 'github', onBackend, loggedIn = false, onLogin, onLogout,
-  onRefresh, onCopyRef, onCarry, onZongpi, onSubmit, onQinci,
+  onRefresh, onCopyRef, onCarry, onZongpi, onSubmit, onQinci, onReject, onShelve,
   nextUp, onNextUp, onNoticeClose,
 }) {
   const pct = percentOf(readStep);
@@ -74,6 +74,11 @@ export function Topbar({
                   onClick=${onStyle}>${S.style.label(style)}</button>`}
                 ${onTheme && html`<button class="btn-ghost more-item appearance-btn" title=${S.appearance.title(theme)}
                   onClick=${onTheme}>${S.appearance.label(theme)}</button>`}
+                ${/* 门下独有动作：留（read-state shelved）/ 关（reject）。GitHub driver 没这两个口就不渲染。 */ ''}
+                ${onShelve && !archived && html`<button class="btn-ghost more-item shelve-btn" title=${S.decision.shelveTitle}
+                  onClick=${onShelve}>${S.decision.shelve}</button>`}
+                ${onReject && !archived && html`<button class="btn-ghost more-item reject-btn" title=${S.decision.rejectTitle}
+                  disabled=${busy || !onHead} onClick=${onReject}>${S.decision.reject}</button>`}
                 ${/* 数据源（M3c）：GitHub ⇄ 门下服务；门下模式下再给登录/登出。 */ ''}
                 ${onBackend && html`<button class="btn-ghost more-item backend-btn" title=${S.backend.title(backend)}
                   onClick=${onBackend}>${S.backend.label(backend)}</button>`}

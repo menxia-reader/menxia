@@ -73,6 +73,16 @@ test('parseDeepLink: ?pr=13 及带 path/line', () => {
     { repo: null, prNumber: 13, path: 'docs/a.md', line: 42 });
 });
 
+test('parseDeepLink: 门下 review id（?pr=rv_…）与 GitHub 整数号并存（M3c）', () => {
+  const rid = 'rv_01ARZ3NDEKTSV4RRFFQ69G5FAV';
+  assert.deepEqual(parseDeepLink(`?pr=${rid}&path=docs/a.md&line=3`), { repo: null, prNumber: rid, path: 'docs/a.md', line: 3 });
+  assert.equal(parseDeepLink('?pr=13').prNumber, 13);                       // 整数仍是 number（与 pr.number 严格相等）
+  ['rv_short', 'rv_01arz3ndektsv4rrffq69g5fav', 'rv_01ARZ3NDEKTSV4RRFFQ69G5FAVX', '0', '-3', '13abc']
+    .forEach((bad) => assert.equal(parseDeepLink(`?pr=${bad}`), null, `应拒：${bad}`));
+  assert.equal(buildDeepLink('https://x/', { prNumber: rid, path: 'docs/a.md' }), `https://x/?pr=${rid}&path=docs%2Fa.md`);
+  assert.deepEqual(parseDeepLink(buildDeepLink('https://x/', { prNumber: rid }).slice('https://x/'.length)).prNumber, rid);
+});
+
 test('parseDeepLink: ?repo= 让链接自带仓（跨人传链的前提）', () => {
   assert.deepEqual(parseDeepLink('?repo=charliezong18/agent-commons&pr=3'),
     { repo: 'charliezong18/agent-commons', prNumber: 3, path: null, line: null });
