@@ -276,6 +276,32 @@ test('pollEvents：首次无游标只记 next_cursor 不报事件；之后带 si
   assert.equal(localStorage.getItem('menxia.svc.events'), 'CUR2');
 });
 
+test('P2-3 事件游标按标签分开：A 标签轮询推进游标后，B 标签仍能收到同一批事件', async () => {
+  const stores = { a: new Map(), b: new Map() };
+  const asStorage = (m) => ({ getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k) });
+  const realSession = globalThis.sessionStorage;
+  try {
+    stubFetch((url) => (/since=CUR1/.test(url)
+      ? res(200, { items: [{ type: 'revision.created', review_id: 'rv_x' }], next_cursor: 'CUR2', has_more: false })
+      : res(200, { items: [], next_cursor: /since=CUR2/.test(url) ? 'CUR2' : 'CUR1', has_more: false })));
+    for (const t of ['a', 'b']) { globalThis.sessionStorage = asStorage(stores[t]); await svc.pollEvents(); }   // 两个标签各自对齐
+    globalThis.sessionStorage = asStorage(stores.a);
+    assert.equal((await svc.pollEvents()).items.length, 1, 'A 收到事件');
+    globalThis.sessionStorage = asStorage(stores.b);
+    assert.equal((await svc.pollEvents()).items.length, 1, 'B 也要收到（共用 localStorage 游标时 B 拿到 A 推进后的游标 → items=[] → 不刷新）');
+  } finally { globalThis.sessionStorage = realSession; }
+});
+
+test('P2-4 判带幂等键：createIssueComment(…, {idempotencyKey}) → Idempotency-Key 头', async () => {
+  stubFetch((url, opts, n) => {
+    if (n === 1) return res(200, REVIEW);
+    assert.equal(opts.headers['Idempotency-Key'], 'oid-12345678');
+    return res(201, { id: 'd1' });
+  });
+  await svc.createIssueComment(REVIEW.id, '改', { idempotencyKey: 'oid-12345678' });
+  assert.equal(calls.length, 2);
+});
+
 test('logout：POST /me/logout 带 bearer，然后本地 token 与事件游标都清', async () => {
   localStorage.setItem('menxia.svc.events', 'X');
   stubFetch((url, opts) => { assert.equal(url, `${svc.API_BASE}/me/logout`); assert.equal(opts.headers.Authorization, 'Bearer A1'); return res(204, null); });
