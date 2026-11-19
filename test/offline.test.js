@@ -80,6 +80,72 @@ test('cacheKey：稳定、含 pr+path，空段不产生空占位', () => {
   assert.equal(cacheKey('comments', { pr: 7 }), 'comments::7');
 });
 
+// ── bughunt 2026-11-18 P1-3 / P1-4 / P2-4 ──
+import { outboxBelongs, makeOutboxSender } from '../src/offline.js';
+
+function memIo(items) {
+  const q = new Map(items.map((it) => [it.id, { ...it }]));
+  return {
+    q,
+    list: async () => [...q.values()].map((it) => ({ ...it })),
+    remove: async (id) => { q.delete(id); },
+    put: async (it) => { q.set(it.id, { ...it }); return true; },
+  };
+}
+
+test('P1-3 离线判带 answers：入队项保留 answers，补发时原样交给 createIssueComment', async () => {
+  const answers = [{ question_id: 'q1', option_ids: ['a'] }];
+  const it = makeOutboxItem({ pr: 'rv_1', body: '改开头', answers, backend: 'service' });
+  assert.deepEqual(it.answers, answers);
+  const io = memIo([it]);
+  const got = [];
+  const api = { createIssueComment: async (pr, body, opts) => { got.push({ pr, body, answers: opts?.answers }); } };
+  await flushOutbox(makeOutboxSender(api), { io });
+  assert.deepEqual(got, [{ pr: 'rv_1', body: '改开头', answers }]);
+  assert.equal(io.q.size, 0);
+});
+
+test('P1-4 outbox 分数据源：只补发属于当前数据源（GitHub 再分仓）的项，别的原样留着', async () => {
+  const gh = makeOutboxItem({ pr: 207, body: 'gh 判', backend: 'github', repo: 'o/r' });
+  const ghOther = makeOutboxItem({ pr: 3, body: '别的仓', backend: 'github', repo: 'o/other' });
+  const sv = makeOutboxItem({ pr: 'rv_9', body: '门下判', backend: 'service' });
+  const legacyGh = { ...makeOutboxItem({ pr: 12, body: '老 gh 项', repo: 'o/r' }), backend: undefined };
+  const legacySv = { ...makeOutboxItem({ pr: 'rv_8', body: '老门下项' }), backend: undefined };
+  const io = memIo([gh, ghOther, sv, legacyGh, legacySv]);
+  const sent = [];
+  const sender = async (it) => { sent.push(it.pr); };
+  await flushOutbox(sender, { io, accept: (it) => outboxBelongs(it, { backend: 'service', repo: '' }) });
+  assert.deepEqual(sent.sort(), ['rv_8', 'rv_9']);
+  assert.deepEqual([...io.q.values()].map((x) => x.pr).sort(), [12, 207, 3].sort());
+  sent.length = 0;
+  await flushOutbox(sender, { io, accept: (it) => outboxBelongs(it, { backend: 'github', repo: 'O/R' }) });
+  assert.deepEqual(sent.sort(), [12, 207]);
+  assert.deepEqual([...io.q.values()].map((x) => x.pr), [3]);
+});
+
+test('P2-4 outbox 补发不重复：带幂等键；上次失败过（tries>0）且判其实已落地 → 不再发、直接出队', async () => {
+  const it = { ...makeOutboxItem({ pr: 'rv_1', body: '改开头', backend: 'service' }), tries: 1 };
+  const io = memIo([it]);
+  let creates = 0;
+  const api = {
+    listIssueComments: async () => [{ body: '**判（改）** · v2\n\n改开头' }],
+    createIssueComment: async () => { creates += 1; },
+  };
+  const r = await flushOutbox(makeOutboxSender(api), { io });
+  assert.equal(creates, 0, '响应丢了但服务端已落地的判，补发会多出一条重复的「要改」');
+  assert.equal(r.sent, 1);
+  assert.equal(io.q.size, 0);
+
+  const it2 = { ...makeOutboxItem({ pr: 'rv_1', body: '另一条', backend: 'service' }), tries: 1 };
+  const keys = [];
+  const api2 = {
+    listIssueComments: async () => [{ body: '**判（改）** · v2\n\n改开头' }],
+    createIssueComment: async (_pr, _b, opts) => { keys.push(opts?.idempotencyKey); },
+  };
+  await flushOutbox(makeOutboxSender(api2), { io: memIo([it2]) });
+  assert.deepEqual(keys, [it2.id], '没落地的照发，并带本地 id 作幂等键');
+});
+
 test('flushOutbox：node 无 IDB → 空队列，sender 一次都不该被调（不误发）', async () => {
   let calls = 0;
   const r = await flushOutbox(async () => { calls += 1; });

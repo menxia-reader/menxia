@@ -92,8 +92,52 @@ export function newUuid() {
  * 一条 outbox 项的形状（纯数据，便于测试）。
  * kind 目前只有 'issueComment'（判）；留字段是为了将来划句涂归也能进同一条队列，不改结构。
  */
-export function makeOutboxItem({ pr, body, kind = 'issueComment', repo = '' }) {
-  return { id: newUuid(), kind, pr, body, repo, createdAt: new Date().toISOString(), tries: 0 };
+// answers：门下服务的结构化判（判框按 questions 作答；服务端必答校验，丢了补发永远 400——bughunt P1-3）。
+// backend（+ GitHub 的 repo）：这条属于哪个数据源，flush 只发当前数据源的（P1-4）。
+export function makeOutboxItem({ pr, body, kind = 'issueComment', repo = '', backend = 'github', answers = [] }) {
+  return {
+    id: newUuid(), kind, pr, body, repo, backend,
+    answers: Array.isArray(answers) ? answers : [],
+    createdAt: new Date().toISOString(), tries: 0,
+  };
+}
+
+/**
+ * 这条 outbox 项是否属于当前数据源（GitHub 还要同一个仓）。
+ * 老项没有 backend 字段：门下折号是 `rv_…`，GitHub 是数字——按号码空间推断（两者不重叠）。
+ */
+export function outboxBelongs(item, { backend, repo = '' }) {
+  const b = item?.backend || (/^rv_/.test(String(item?.pr ?? '')) ? 'service' : 'github');
+  if (b !== backend) return false;
+  if (b === 'github' && item.repo && repo) return item.repo.toLowerCase() === repo.toLowerCase();
+  return true;
+}
+
+/** 判正文是否已经在服务端那串判里（GitHub 会话区原文 / 门下 decision 渲染成 `**判（改）** · vN\n…\n\n<note>`）。 */
+export function outboxLanded(item, comments) {
+  const b = String(item?.body ?? '');
+  if (!b) return false;
+  return (comments || []).some((c) => {
+    const cb = String(c?.body ?? '');
+    return cb === b || cb.endsWith(`\n\n${b}`);
+  });
+}
+
+/**
+ * 补发 sender（P2-4 不重复）：带本地 id 作幂等键；上次失败过（tries>0，可能是请求到了、响应丢了）
+ * 先查一遍会话区，已经落地就当发成功，不再发第二条。
+ */
+export function makeOutboxSender(api) {
+  return async (it) => {
+    if ((it.tries || 0) > 0 && api.listIssueComments) {
+      const landed = await api.listIssueComments(it.pr).then((cs) => outboxLanded(it, cs), () => false);
+      if (landed) return;
+    }
+    await api.createIssueComment(it.pr, it.body, {
+      ...(it.answers?.length ? { answers: it.answers } : {}),
+      idempotencyKey: it.id,
+    });
+  };
 }
 
 /**
@@ -213,18 +257,20 @@ export async function removeOutbox(id) {
  * 幂等：sender 抛错的条目**留在队列**、tries+1，下次再试；成功的立刻删。返回 { sent, failed }。
  * sender 由调用方注入（真实是 github.createIssueComment），便于测试。
  */
-export async function flushOutbox(sender) {
-  const items = await listOutbox();
+// accept：只发属于当前数据源的项（outboxBelongs），别的原样留着等切回去。io 供测试注入（默认 IDB）。
+const idbIo = { list: () => listOutbox(), remove: (id) => removeOutbox(id), put: (it) => enqueue(it) };
+export async function flushOutbox(sender, { accept = () => true, io = idbIo } = {}) {
+  const items = (await io.list()).filter(accept);
   let sent = 0, failed = 0;
   for (const it of items) {
     try {
       await sender(it);
-      await removeOutbox(it.id);
+      await io.remove(it.id);
       sent += 1;
     } catch {
       failed += 1;
       it.tries = (it.tries || 0) + 1;
-      await enqueue(it);                          // 回写 tries；仍在队列里
+      await io.put(it);                           // 回写 tries；仍在队列里
     }
   }
   return { sent, failed };

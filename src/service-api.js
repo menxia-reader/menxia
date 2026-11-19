@@ -70,7 +70,8 @@ export class ApiError extends Error {
     const e = body?.error || {};
     super(`${status} ${e.code || statusText}${e.message ? ` — ${e.message}` : ''}`);
     this.status = status;
-    this.code = e.code || '';
+    // OAuth 端点（/oauth/token）的错误体是 RFC 6749 形状 { error: "invalid_grant" }，不是 { error: { code } }
+    this.code = e.code || (typeof body?.error === 'string' ? body.error : '');
     this.details = e.details;
     this.retryAfter = e.retry_after_seconds;
     this.tokenDead = status === 401;
@@ -153,25 +154,56 @@ export async function exchangeCode(code, state, { store = sessionStorage } = {})
   }
 }
 
-// refresh 单飞：并发的几个请求同时撞 401 只能刷一次——refresh 轮换，第二次用旧的会作废整个 grant。
+// refresh 单飞：refresh 一次性、轮换，同一 grant 同一时刻只能有一个刷新在途——第二次用旧的会被服务端
+// 判重放、作废整个 grant（服务端按「无宽限期」也要正确，bughunt 2026-11-18 P0-2）。
+// token 存在整个 origin 共享的 localStorage，所以互斥范围也得是整个 origin：
+//   ① 本标签：模块级 refreshing 合并并发调用；
+//   ② 跨标签：navigator.locks 同名锁（没有就退回 ①，老浏览器）；
+//   ③ 进锁后**重读 storage**：refresh_token 已不是自己看到的那个 → 别的标签刚刷过，直接用，不发请求；
+//   ④ 被拒时只在 storage 里仍是自己用掉的那个 refresh 才清——否则会删掉别的标签刚存的有效 token。
+// 只有明确 invalid_grant 才算 grant 已死；5xx / 429 / 网络错是暂时失败，refresh token 保留（P1-5）。
+const LOCK_NAME = 'menxia.svc.refresh';
+let lockManager;   // undefined = 用浏览器 navigator.locks；测试注入替身；null = 不用锁
+export function setLockManager(l) { lockManager = l; }
+function withRefreshLock(fn) {
+  const lm = lockManager !== undefined ? lockManager : (typeof navigator !== 'undefined' ? navigator.locks : null);
+  return lm?.request ? lm.request(LOCK_NAME, fn) : fn();
+}
+const isInvalidGrant = (err) => (err?.status === 400 || err?.status === 401) && err.code === 'invalid_grant';
+
+/** → { auth }（含别的标签已刷新）| { dead: true }（grant 已死）| { transient: true, error }（暂时失败）。 */
 let refreshing = null;
-export function refresh() {
+function refreshFrom(seenRt) {
   if (refreshing) return refreshing;
-  const cur = loadAuth();
-  if (!cur?.refresh_token) return Promise.resolve(null);
-  refreshing = tokenRequest({ grant_type: 'refresh_token', refresh_token: cur.refresh_token, client_id: CLIENT_ID, resource: API_BASE })
-    .catch((err) => {
-      if (err?.status === 400 || err?.status === 401) clearToken();   // invalid_grant：这个 grant 已死
-      return null;
-    })
-    .finally(() => { refreshing = null; });
+  refreshing = Promise.resolve().then(() => withRefreshLock(async () => {
+    const cur = loadAuth();
+    if (!cur?.refresh_token) return { dead: true };
+    if (seenRt && cur.refresh_token !== seenRt) return { auth: cur };
+    try {
+      return { auth: await tokenRequest({ grant_type: 'refresh_token', refresh_token: cur.refresh_token, client_id: CLIENT_ID, resource: API_BASE }) };
+    } catch (error) {
+      if (!isInvalidGrant(error)) return { transient: true, error };
+      const now = loadAuth();
+      if (now?.refresh_token && now.refresh_token !== cur.refresh_token) return { auth: now };
+      clearToken();
+      return { dead: true };
+    }
+  })).finally(() => { refreshing = null; });
   return refreshing;
+}
+export const refresh = () => refreshFrom(loadAuth()?.refresh_token).then((r) => r.auth || null);
+
+function transientRefreshError(err) {
+  const status = err?.status === 429 ? 429 : 503;
+  const e = new ApiError(status, { error: { code: 'refresh_unavailable', message: `登录续期暂时失败，稍后自动重试（${err?.message || err}）` } });
+  e.retryAfter = err?.retryAfter;
+  return e;
 }
 
 async function ensureFresh() {
   const a = loadAuth();
   if (!a) return null;
-  if (a.refresh_token && a.expires_at && a.expires_at - Date.now() < 60_000) return (await refresh()) || loadAuth();
+  if (a.refresh_token && a.expires_at && a.expires_at - Date.now() < 60_000) return (await refreshFrom(a.refresh_token)).auth || loadAuth();
   return a;
 }
 
@@ -183,7 +215,8 @@ export async function logout() {
     } catch { /* 离线也要能登出：本地先清，服务端 grant 到期自灭 */ }
   }
   clearToken();
-  ls()?.removeItem(EVENTS_KEY);
+  ls()?.removeItem(EVENTS_KEY);   // 旧版本把游标放 localStorage，顺手清掉
+  ss()?.removeItem(EVENTS_KEY);
 }
 
 // ───────────────────────── 请求 ─────────────────────────
@@ -193,14 +226,17 @@ async function request(path, opts = {}, retry = true) {
     ...opts,
     headers: { Authorization: `Bearer ${a?.access_token || ''}`, Accept: 'application/json', ...opts.headers },
   });
-  if (res.status === 401 && retry && loadAuth()?.refresh_token) {
-    if (await refresh()) return request(path, opts, false);
+  // 用「本次请求时看到的」refresh 去刷：别的标签已轮换的话，进锁重读就直接拿到新 token 重放
+  if (res.status === 401 && retry && a?.refresh_token) {
+    const r = await refreshFrom(a.refresh_token);
+    if (r.auth) return request(path, opts, false);
+    if (r.transient) throw transientRefreshError(r.error);
   }
   if (!res.ok) throw await toError(res);
   return res;
 }
 const json = (path, opts) => request(path, opts).then((r) => (r.status === 204 ? null : r.json()));
-const post = (path, body, method = 'POST') => json(path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+const post = (path, body, method = 'POST', headers = {}) => json(path, { method, headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
 
 async function pagedItems(pathFor) {
   const out = [];
@@ -421,20 +457,22 @@ export async function submitReview(id, payload) {
 // 结案折（approved/rejected/withdrawn）或本人不是 decider → 退成无锚点的整单评论。
 // answers[]（{question_id, option_ids?|text}）来自判框按 review.questions 的作答（服务端必答校验）。
 const withAnswers = (body, answers) => (Array.isArray(answers) && answers.length ? { ...body, answers } : body);
-export async function createIssueComment(id, body, { answers } = {}) {
+// idempotencyKey：outbox 补发时传本地 id（Idempotency-Key 头，CORS 已放行），服务端支持后重放即返回首次结果。
+export async function createIssueComment(id, body, { answers, idempotencyKey } = {}) {
+  const idem = idempotencyKey ? { 'Idempotency-Key': String(idempotencyKey) } : {};
   const d = await getDetail(id, { fresh: true });
   const closed = !OPEN_STATUSES.has(d.status);
   if (!closed && d.is_decider !== false) {
     try {
       const dec = await post(`/reviews/${encodeURIComponent(id)}/decisions`,
-        withAnswers({ revision_no: d.current_revision_no, verdict: 'request_changes', note: body }, answers));
+        withAnswers({ revision_no: d.current_revision_no, verdict: 'request_changes', note: body }, answers), 'POST', idem);
       details.delete(id);
       return { id: dec?.id, kind: 'decision' };
     } catch (err) {
       if (!(err?.status === 403 || (err?.status === 409 && err.code === 'review_closed'))) throw err;
     }
   }
-  const c = await post(`/reviews/${encodeURIComponent(id)}/comments`, { body });
+  const c = await post(`/reviews/${encodeURIComponent(id)}/comments`, { body }, 'POST', idem);
   return { id: c?.id, kind: 'comment' };
 }
 
@@ -503,8 +541,11 @@ export const markDone = (id) => putState(id, { state: 'done' });
 export const markShelved = (id) => putState(id, { state: 'shelved' });
 
 // ───────────────────────── 增量刷新：事件流 ─────────────────────────
-// 游标存 localStorage（HMAC 游标绑定用户，登出时清）。首次没游标：把现有事件翻到底只记游标，不当作新事件。
-export async function pollEvents({ store = ls() } = {}) {
+// 游标存 sessionStorage——**每个标签一份**（bughunt P2-3：共用 localStorage 时先轮询的标签把游标推到头，
+// 后轮询的标签拿到 items=[]，清单不刷新）。HMAC 游标绑定用户，登出时清。
+// 首次没游标（含新开标签）：把现有事件翻到底只记游标，不当作新事件——新标签刚拉过清单，不缺这一轮。
+const ss = () => (typeof sessionStorage !== 'undefined' ? sessionStorage : null);
+export async function pollEvents({ store = ss() } = {}) {
   let since = store?.getItem(EVENTS_KEY) || '';
   const initial = !since;
   const items = [];

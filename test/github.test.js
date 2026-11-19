@@ -262,3 +262,16 @@ test('verifyToken: 权限齐全时 checksAccess=true', async () => {
   });
   assert.equal((await gh.verifyToken()).checksAccess, true);
 });
+
+// ── bughunt 2026-11-18 P2-5：GitHub 数据源也要自动刷新（回前台 / 定时），且不烧 API 配额 ──
+test('P2-5 pollEvents（GitHub）：首轮只对齐；之后带 If-None-Match，304 → 无事件；内容变了 → 报出最近变动的折', async () => {
+  const notModified = { ok: false, status: 304, statusText: 'Not Modified', headers: { get: () => null }, json: async () => ({}) };
+  stubFetch((url) => { assert.match(url, /\/repos\/owner\/repo\/pulls\?state=all&sort=updated&direction=desc&per_page=1$/); return ok([{ number: 7 }], { etag: 'W/"e1"' }); });
+  assert.deepEqual(await gh.pollEvents(), { items: [], initial: true });
+  stubFetch((url, opts) => { assert.equal(opts.headers['If-None-Match'], 'W/"e1"'); return notModified; });
+  assert.deepEqual(await gh.pollEvents(), { items: [], initial: false }, '304 不计 GitHub 主配额：定时探一次几乎零成本');
+  stubFetch(() => ok([{ number: 9 }], { etag: 'W/"e2"' }));
+  assert.deepEqual(await gh.pollEvents(), { items: [{ review_id: 9 }], initial: false });
+  stubFetch((url, opts) => { assert.equal(opts.headers['If-None-Match'], 'W/"e2"'); return notModified; });
+  assert.deepEqual((await gh.pollEvents()).items, []);
+});
