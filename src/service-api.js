@@ -207,13 +207,29 @@ async function ensureFresh() {
   return a;
 }
 
-export async function logout() {
-  const a = loadAuth();
+// 登出（bughunt P2-2）：先 RFC 7009 POST /oauth/revoke 交 refresh_token——不需要有效 access，服务端作废整个
+// grant，未知/已作废 token 也回 200。没有 refresh 或 revoke 没成功（离线 / 5xx）再退回 /me/logout 带 access。
+// 两条都失败也照样清本地：离线也要能登出，服务端 grant 到期自灭。
+async function revokeGrant(a) {
+  if (a?.refresh_token) {
+    try {
+      const res = await fetch(`${SERVICE_URL}/oauth/revoke`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ token: a.refresh_token, token_type_hint: 'refresh_token', client_id: CLIENT_ID }).toString(),
+      });
+      if (res.ok) return;
+    } catch { /* 走下面的兜底 */ }
+  }
   if (a?.access_token) {
     try {
       await fetch(`${API_BASE}/me/logout`, { method: 'POST', headers: { Authorization: `Bearer ${a.access_token}` } });
-    } catch { /* 离线也要能登出：本地先清，服务端 grant 到期自灭 */ }
+    } catch { /* 离线 */ }
   }
+}
+
+export async function logout() {
+  await revokeGrant(loadAuth());
   clearToken();
   ls()?.removeItem(EVENTS_KEY);   // 旧版本把游标放 localStorage，顺手清掉
   ss()?.removeItem(EVENTS_KEY);
@@ -458,21 +474,35 @@ export async function submitReview(id, payload) {
 // answers[]（{question_id, option_ids?|text}）来自判框按 review.questions 的作答（服务端必答校验）。
 const withAnswers = (body, answers) => (Array.isArray(answers) && answers.length ? { ...body, answers } : body);
 // idempotencyKey：outbox 补发时传本地 id（Idempotency-Key 头，CORS 已放行），服务端支持后重放即返回首次结果。
-export async function createIssueComment(id, body, { answers, idempotencyKey } = {}) {
+// ref（bughunt P2-1）：用户判时正在读的版本凭证 `<id>@<no>`——判落在他读过的版本上，agent 推了新版 → 服务端
+//   409 stale_revision（details.current_revision_no），提示刷新后再判、正文留在判框。没传 ref（老 outbox 项）才取最新号。
+// staleAsComment：离线补发用——写于旧版的判不再作为决定生效，退成一条标明版本的整单评论，免得永远卡在队列里
+//   （同「旧版本草稿降级成无锚点整单评论」）。
+export async function createIssueComment(id, body, { answers, idempotencyKey, ref, staleAsComment = false } = {}) {
   const idem = idempotencyKey ? { 'Idempotency-Key': String(idempotencyKey) } : {};
   const d = await getDetail(id, { fresh: true });
   const closed = !OPEN_STATUSES.has(d.status);
+  const readNo = parseRef(ref).no ?? d.current_revision_no;
+  let text = body;
   if (!closed && d.is_decider !== false) {
     try {
       const dec = await post(`/reviews/${encodeURIComponent(id)}/decisions`,
-        withAnswers({ revision_no: d.current_revision_no, verdict: 'request_changes', note: body }, answers), 'POST', idem);
+        withAnswers({ revision_no: readNo, verdict: 'request_changes', note: body }, answers), 'POST', idem);
       details.delete(id);
       return { id: dec?.id, kind: 'decision' };
     } catch (err) {
-      if (!(err?.status === 403 || (err?.status === 409 && err.code === 'review_closed'))) throw err;
+      if (err?.status === 409 && err.code === 'stale_revision') {
+        const cur = err.details?.current_revision_no ?? '?';
+        if (!staleAsComment) {
+          err.message = `有新版本，刷新后再判（你读的是 v${readNo}，现在是 v${cur}）`;
+          throw err;
+        }
+        details.delete(id);
+        text = `（离线时写于 v${readNo} 的判；这折已推到 v${cur}，未作为判生效）\n\n${body}`;
+      } else if (!(err?.status === 403 || (err?.status === 409 && err.code === 'review_closed'))) throw err;
     }
   }
-  const c = await post(`/reviews/${encodeURIComponent(id)}/comments`, { body }, 'POST', idem);
+  const c = await post(`/reviews/${encodeURIComponent(id)}/comments`, { body: text }, 'POST', idem);
   return { id: c?.id, kind: 'comment' };
 }
 

@@ -302,11 +302,58 @@ test('P2-4 判带幂等键：createIssueComment(…, {idempotencyKey}) → Idemp
   assert.equal(calls.length, 2);
 });
 
-test('logout：POST /me/logout 带 bearer，然后本地 token 与事件游标都清', async () => {
+test('P2-2 logout：RFC 7009 POST /oauth/revoke（form token=refresh, hint, client_id，不带 bearer），然后本地 token 与事件游标都清', async () => {
   localStorage.setItem('menxia.svc.events', 'X');
   sessionStorage.setItem('menxia.svc.events', 'Y');
-  stubFetch((url, opts) => { assert.equal(url, `${svc.API_BASE}/me/logout`); assert.equal(opts.headers.Authorization, 'Bearer A1'); return res(204, null); });
+  // 断言放在 logout 之后：logout 吞掉 fetch 抛的错（离线也要能登出），stub 里断言会被吞
+  stubFetch(() => res(200, null));
   await svc.logout();
+  assert.equal(calls.length, 1, 'revoke 成功就不再打 /me/logout');
+  const { url, opts } = calls[0];
+  assert.equal(url, `${svc.SERVICE_URL}/oauth/revoke`); assert.equal(opts.method, 'POST');
+  assert.equal(opts.headers['Content-Type'], 'application/x-www-form-urlencoded');
+  assert.equal(opts.headers.Authorization, undefined);
+  const f = new URLSearchParams(opts.body);
+  assert.equal(f.get('token'), 'R1'); assert.equal(f.get('token_type_hint'), 'refresh_token'); assert.equal(f.get('client_id'), 'menxia-web');
   assert.equal(svc.getToken(), ''); assert.equal(localStorage.getItem('menxia.svc.events'), null);
   assert.equal(sessionStorage.getItem('menxia.svc.events'), null);
+});
+
+test('P2-2 logout：revoke 失败（网络 / 非 200）退回 /me/logout 带 bearer；都失败本地照样清', async () => {
+  stubFetch((url, opts, n) => (n === 1 ? res(503, null) : res(204, null)));
+  await svc.logout();
+  assert.equal(calls.length, 2); assert.equal(svc.getToken(), '');
+  assert.equal(calls[0].url, `${svc.SERVICE_URL}/oauth/revoke`);
+  assert.equal(calls[1].url, `${svc.API_BASE}/me/logout`); assert.equal(calls[1].opts.headers.Authorization, 'Bearer A1');
+  svc.setAuthStorage(svc.memoryAuthStorage({ access_token: 'A1', refresh_token: 'R1', expires_at: Date.now() + 3600e3 }));
+  globalThis.fetch = async () => { throw new TypeError('offline'); };
+  await svc.logout();
+  assert.equal(svc.getToken(), '');
+});
+
+test('P2-1 判带用户正在读的版本：ref=rv@1 而服务端已到 v2 → revision_no=1（不取最新号）', async () => {
+  stubFetch((url, opts, n) => {
+    if (n === 1) return res(200, REVIEW);   // current_revision_no=2
+    assert.match(url, /\/decisions$/);
+    assert.equal(JSON.parse(opts.body).revision_no, 1);
+    return res(409, { error: { code: 'stale_revision', message: 'decision targets revision 1 but current is 2', details: { current_revision_no: 2 } } });
+  });
+  await assert.rejects(() => svc.createIssueComment(REVIEW.id, '改', { ref: `${REVIEW.id}@1` }), (err) => {
+    assert.equal(err.status, 409); assert.equal(err.code, 'stale_revision');
+    assert.match(err.message, /有新版本，刷新后再判/);
+    return true;
+  });
+  assert.equal(calls.length, 2, '409 不得退成评论');
+});
+
+test('P2-1 离线补发（staleAsComment）遇 409 stale_revision → 退成整单评论（标明写于哪版、未作为判生效），不卡队列', async () => {
+  stubFetch((url, opts, n) => {
+    if (n === 1) return res(200, REVIEW);
+    if (n === 2) return res(409, { error: { code: 'stale_revision', message: 'x', details: { current_revision_no: 2 } } });
+    assert.match(url, /\/comments$/);
+    const b = JSON.parse(opts.body).body;
+    assert.match(b, /v1/); assert.match(b, /v2/); assert.ok(b.endsWith('\n\n改'), b);
+    return res(201, { id: 'c7' });
+  });
+  assert.deepEqual(await svc.createIssueComment(REVIEW.id, '改', { ref: `${REVIEW.id}@1`, staleAsComment: true }), { id: 'c7', kind: 'comment' });
 });

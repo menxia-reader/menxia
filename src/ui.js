@@ -1322,7 +1322,8 @@ function App() {
     if (!v) return;
     setBusy(true);
     try {
-      await api.createIssueComment(c.pr.number, v, { answers });
+      // ref = 打开（或轮询重开）这折时的 head：判落在他读的版本上，推了新版服务端 409，提示刷新、正文留在判框（P2-1）
+      await api.createIssueComment(c.pr.number, v, { answers, ref: c.pr.head?.sha });
       setZongpi(false);
       loadComments(c.pr.number); // 重拉：让刚呈的判立刻显示在折首
       setZongpiOpen(true);       // 折叠组默认收起，自己刚发的那条必须展开给他看见——否则回到「只能发不能看」
@@ -1330,7 +1331,7 @@ function App() {
     } catch (err) {
       // 断网（fetch 直接 reject，无 .status）→ 落 outbox 待发，别当发送失败丢掉他打的字。
       // 真错误（403/422 等有 .status）→ 照旧报错，那不是网络问题，排队也发不出去。
-      const offline = !DEMO && typeof err?.status !== 'number' && (await enqueue(makeOutboxItem({ pr: c.pr.number, body: v, answers, backend: BACKEND, repo: gh.repoSlug?.() || '' })));
+      const offline = !DEMO && typeof err?.status !== 'number' && (await enqueue(makeOutboxItem({ pr: c.pr.number, body: v, answers, backend: BACKEND, repo: gh.repoSlug?.() || '', ref: c.pr.head?.sha || null })));
       if (offline) {
         setZongpi(false);
         await refreshOutboxN();

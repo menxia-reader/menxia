@@ -94,9 +94,10 @@ export function newUuid() {
  */
 // answers：门下服务的结构化判（判框按 questions 作答；服务端必答校验，丢了补发永远 400——bughunt P1-3）。
 // backend（+ GitHub 的 repo）：这条属于哪个数据源，flush 只发当前数据源的（P1-4）。
-export function makeOutboxItem({ pr, body, kind = 'issueComment', repo = '', backend = 'github', answers = [] }) {
+// ref：判写于哪个版本（门下 `<id>@<no>`，P2-1）；补发时服务端按它校验，推了新版就退成标明版本的整单评论。
+export function makeOutboxItem({ pr, body, kind = 'issueComment', repo = '', backend = 'github', answers = [], ref = null }) {
   return {
-    id: newUuid(), kind, pr, body, repo, backend,
+    id: newUuid(), kind, pr, body, repo, backend, ref,
     answers: Array.isArray(answers) ? answers : [],
     createdAt: new Date().toISOString(), tries: 0,
   };
@@ -135,6 +136,7 @@ export function makeOutboxSender(api) {
     }
     await api.createIssueComment(it.pr, it.body, {
       ...(it.answers?.length ? { answers: it.answers } : {}),
+      ...(it.ref ? { ref: it.ref, staleAsComment: true } : {}),
       idempotencyKey: it.id,
     });
   };
