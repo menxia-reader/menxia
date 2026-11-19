@@ -105,6 +105,17 @@ test('P1-3 离线判带 answers：入队项保留 answers，补发时原样交�
   assert.equal(io.q.size, 0);
 });
 
+test('P2-1 离线判记下写于哪个版本：入队项带 ref，补发时传 ref + staleAsComment；老项没 ref 不传', async () => {
+  const it = makeOutboxItem({ pr: 'rv_1', body: '改', backend: 'service', ref: 'rv_1@3' });
+  assert.equal(it.ref, 'rv_1@3');
+  const legacy = { ...makeOutboxItem({ pr: 'rv_2', body: '老', backend: 'service' }) };
+  delete legacy.ref;
+  const got = [];
+  const api = { createIssueComment: async (pr, _b, opts) => { got.push({ pr, ref: opts?.ref, staleAsComment: opts?.staleAsComment }); } };
+  await flushOutbox(makeOutboxSender(api), { io: memIo([it, legacy]) });
+  assert.deepEqual(got, [{ pr: 'rv_1', ref: 'rv_1@3', staleAsComment: true }, { pr: 'rv_2', ref: undefined, staleAsComment: undefined }]);
+});
+
 test('P1-4 outbox 分数据源：只补发属于当前数据源（GitHub 再分仓）的项，别的原样留着', async () => {
   const gh = makeOutboxItem({ pr: 207, body: 'gh 判', backend: 'github', repo: 'o/r' });
   const ghOther = makeOutboxItem({ pr: 3, body: '别的仓', backend: 'github', repo: 'o/other' });

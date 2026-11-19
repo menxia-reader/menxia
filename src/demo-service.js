@@ -96,6 +96,12 @@ async function handle(url, init) {
     } else return J({ error: 'unsupported_grant_type' }, 400);
     return J({ access_token: state.tokens.access, refresh_token: state.tokens.refresh, token_type: 'Bearer', expires_in: 86400, scope: 'reviewer', client_kind: 'first_party' });
   }
+  // RFC 7009（同服务端 oauth_routes.ts）：持有 refresh/access 即作废整个 grant；未知 token 也回 200，无 bearer
+  if (path === '/oauth/revoke' && method === 'POST') {
+    const t = new URLSearchParams(String(init.body || '')).get('token');
+    if (t && (t === state.tokens.refresh || t === state.tokens.access)) { state.loggedOut = true; state.revokedVia = 'rfc7009'; state.tokens = { access: 'revoked', refresh: 'revoked' }; }
+    return new Response(null, { status: 200 });
+  }
 
   // ── bearer ──
   if (!path.startsWith('/api/v1/')) return ERR(404, 'not_found');
@@ -362,7 +368,7 @@ export async function runSvcSmoke(docEl) {
 
   // ⑦ 登出作废 grant
   await logout();
-  chk('svc-logout-revokes-grant', state.loggedOut === true && getToken() === '');
+  chk('svc-logout-revokes-grant', state.loggedOut === true && state.revokedVia === 'rfc7009' && getToken() === '');
   try { localStorage.removeItem('menxia.svc.events'); sessionStorage.removeItem('menxia.svc.events'); } catch { /* 无痕 */ }
 
   console.log(`[svc] RESULT pass=${pass} fail=${fail}`);
