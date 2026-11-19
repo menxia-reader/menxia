@@ -269,11 +269,11 @@ test('pollEvents：首次无游标只记 next_cursor 不报事件；之后带 si
   stubFetch((url) => { assert.ok(!/since=/.test(url)); return res(200, { items: [{ type: 'comment.created' }], next_cursor: 'CUR1', has_more: false }); });
   const first = await svc.pollEvents();
   assert.deepEqual(first, { items: [], initial: true });
-  assert.equal(localStorage.getItem('menxia.svc.events'), 'CUR1');
+  assert.equal(sessionStorage.getItem('menxia.svc.events'), 'CUR1');   // 每标签一份（P2-3）
   stubFetch((url) => { assert.match(url, /since=CUR1/); return res(200, { items: [{ type: 'revision.created', review_id: 'rv_x' }], next_cursor: 'CUR2', has_more: false }); });
   const next = await svc.pollEvents();
   assert.equal(next.items.length, 1);
-  assert.equal(localStorage.getItem('menxia.svc.events'), 'CUR2');
+  assert.equal(sessionStorage.getItem('menxia.svc.events'), 'CUR2');
 });
 
 test('P2-3 事件游标按标签分开：A 标签轮询推进游标后，B 标签仍能收到同一批事件', async () => {
@@ -304,7 +304,9 @@ test('P2-4 判带幂等键：createIssueComment(…, {idempotencyKey}) → Idemp
 
 test('logout：POST /me/logout 带 bearer，然后本地 token 与事件游标都清', async () => {
   localStorage.setItem('menxia.svc.events', 'X');
+  sessionStorage.setItem('menxia.svc.events', 'Y');
   stubFetch((url, opts) => { assert.equal(url, `${svc.API_BASE}/me/logout`); assert.equal(opts.headers.Authorization, 'Bearer A1'); return res(204, null); });
   await svc.logout();
   assert.equal(svc.getToken(), ''); assert.equal(localStorage.getItem('menxia.svc.events'), null);
+  assert.equal(sessionStorage.getItem('menxia.svc.events'), null);
 });

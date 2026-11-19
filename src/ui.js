@@ -46,7 +46,7 @@ import { registerServiceWorker, hardUpdate } from './sw-register.js';
 import { getBackend, setBackend, nextBackend, isService } from './backend.js';
 import {
   isReadStateComment, parseReadState, shouldPromptJump,
-  makeOutboxItem, enqueue, listOutbox, flushOutbox, putMeta, getMeta,
+  makeOutboxItem, enqueue, listOutbox, flushOutbox, outboxBelongs, makeOutboxSender, putMeta, getMeta,
   cachedFetch, cacheKey,
 } from './offline.js';
 
@@ -273,10 +273,13 @@ function App() {
 
   // ── M2 离线包：装 SW + 开机/联网时 flush 判 outbox ──
   // DEMO 一律跳过（冒烟测试不该注册 SW、不该碰 IndexedDB）。
-  const refreshOutboxN = useCallback(async () => { setOutboxN((await listOutbox()).length); }, []);
+  // outbox 按数据源分隔（bughunt P1-4）：只数、只发当前数据源（GitHub 再分仓）的项，别的留着等切回去
+  const outboxMine = (it) => outboxBelongs(it, { backend: BACKEND, repo: gh.repoSlug?.() || '' });
+  const refreshOutboxN = useCallback(async () => { setOutboxN((await listOutbox()).filter(outboxMine).length); }, []);
   const flushOut = useCallback(async () => {
     // 逐条把待发判发出去；成功即出队。sender 抛错的留队可重试（见 offline.flushOutbox）。
-    await flushOutbox(async (it) => { await gh.createIssueComment(it.pr, it.body); });
+    // sender 带 answers（P1-3）、幂等键 + 失败过先查重（P2-4）。
+    await flushOutbox(makeOutboxSender(gh), { accept: outboxMine });
     await refreshOutboxN();
     // 刚 flush 完，若当前正看着那折，重拉一次让新判显示。
     const c = R.current.cur;
@@ -326,7 +329,8 @@ function App() {
     loadPRs();
   }, []);
 
-  // M3c 增量刷新（门下服务）：GET /events?since= 轮询 + 回到前台时查一次。
+  // 增量刷新：60s 轮询 + 回到前台时查一次。门下服务走 GET /events?since=（M3c）；
+  // GitHub 走带 If-None-Match 的「最近更新一折」探针，没变 304 不耗主配额（bughunt P2-5，github.pollEvents）。
   // 有本折的新版本 → 重开到 head 并提示；只有新评论/判 → 重拉批注串；别的折动了 → 刷清单。
   const pollRef = useRef(null);
   useEffect(() => {
@@ -1326,7 +1330,7 @@ function App() {
     } catch (err) {
       // 断网（fetch 直接 reject，无 .status）→ 落 outbox 待发，别当发送失败丢掉他打的字。
       // 真错误（403/422 等有 .status）→ 照旧报错，那不是网络问题，排队也发不出去。
-      const offline = !DEMO && typeof err?.status !== 'number' && (await enqueue(makeOutboxItem({ pr: c.pr.number, body: v, repo: gh.repoSlug?.() || '' })));
+      const offline = !DEMO && typeof err?.status !== 'number' && (await enqueue(makeOutboxItem({ pr: c.pr.number, body: v, answers, backend: BACKEND, repo: gh.repoSlug?.() || '' })));
       if (offline) {
         setZongpi(false);
         await refreshOutboxN();

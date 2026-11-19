@@ -203,7 +203,7 @@ async function handle(url, init) {
 export function installServiceFake(docs) {
   seed(docs);
   setAuthStorage(memoryAuthStorage({ access_token: state.tokens.access, refresh_token: state.tokens.refresh, expires_at: Date.now() + 86400e3 }));
-  try { localStorage.removeItem('menxia.svc.events'); } catch { /* 无痕 */ }
+  try { localStorage.removeItem('menxia.svc.events'); sessionStorage.removeItem('menxia.svc.events'); } catch { /* 无痕 */ }
   const real = window.fetch.bind(window);
   window.fetch = async (input, init) => {
     const url = typeof input === 'string' ? input : input?.url;
@@ -341,7 +341,8 @@ export async function runSvcSmoke(docEl) {
   const hitsBefore = state.contentHits.filter((n) => n === 3).length;
   await window.__svcPoll?.();
   chk('svc-events-reopen-head', Boolean(await waitFor(() => state.contentHits.filter((n) => n === 3).length > hitsBefore)), `hits=${state.contentHits}`);
-  chk('svc-events-cursor-advanced', localStorage.getItem('menxia.svc.events') === String(state.events.length), `cur=${localStorage.getItem('menxia.svc.events')} n=${state.events.length}`);
+  // 游标每标签一份（sessionStorage，bughunt P2-3）
+  chk('svc-events-cursor-advanced', sessionStorage.getItem('menxia.svc.events') === String(state.events.length), `cur=${sessionStorage.getItem('menxia.svc.events')} n=${state.events.length}`);
   chk('svc-events-notice', Boolean(await waitFor(() => /v3/.test(document.querySelector('.notice')?.textContent || ''))), document.querySelector('.notice')?.textContent);
 
   // ⑥ 画可 = approve 带 revision_no=3（所批即所合）；这折带题，画可先走判框答题
@@ -362,7 +363,7 @@ export async function runSvcSmoke(docEl) {
   // ⑦ 登出作废 grant
   await logout();
   chk('svc-logout-revokes-grant', state.loggedOut === true && getToken() === '');
-  try { localStorage.removeItem('menxia.svc.events'); } catch { /* 无痕 */ }
+  try { localStorage.removeItem('menxia.svc.events'); sessionStorage.removeItem('menxia.svc.events'); } catch { /* 无痕 */ }
 
   console.log(`[svc] RESULT pass=${pass} fail=${fail}`);
 }

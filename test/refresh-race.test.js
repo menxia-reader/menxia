@@ -106,17 +106,24 @@ test('P0-2 第二条路：别的标签已刷新、旧 access 失效 → 本标�
 
 test('P0-2 本标签用掉的 refresh 被拒（invalid_grant）时，别的标签刚存的新 token 不能被清掉', async () => {
   // 没有锁（老浏览器）时的兜底：B 拿 R1 去刷，途中 A 已存好 R2；B 收到 invalid_grant 只能清「自己用掉的」那份
+  // （R1 被拒但 grant 没作废 = 服务端宽限期内的口径；无宽限时整族已死，清不清都救不回来）
   const server = fakeServer({
     onToken: async (s) => {
-      s.tokens.get('R1').replaced = true;   // A 先到，已轮换
+      if (!s.tokens.has('R1')) return;
+      s.tokens.delete('R1');               // A 先到，已轮换：R1 → invalid_grant
+      s.tokens.get('A1').revoked = true;
+      s.tokens.set('A9', { kind: 'access', gen: 9, revoked: false });
+      s.tokens.set('R9', { kind: 'refresh', gen: 9, replaced: false });
       shared.set(JSON.stringify({ access_token: 'A9', refresh_token: 'R9', expires_at: Date.now() + 86_400_000 }));
     },
   });
   const a0 = await import(`${WEB}?mk=${seq++}`);
   const shared = a0.memoryAuthStorage({ access_token: 'A1', refresh_token: 'R1', expires_at: Date.now() + 30_000 });
   const b = await tab(server, shared, null);
-  await b.listOpenPRs().catch(() => {});
+  const r = await b.listOpenPRs().then(() => 'ok', (e) => `${e.status} tokenDead=${e.tokenDead}`);
   assert.equal(JSON.parse(shared.get() || 'null')?.refresh_token, 'R9', 'storage 里已不是本次用掉的 R1，不得 clearToken');
+  assert.equal(r, 'ok', '直接改用别的标签刚存的新 token');
+  assert.equal(server.tokenCalls, 1);
 });
 
 test('对照：同一标签页内并发请求只刷新一次（单飞有效）', async () => {

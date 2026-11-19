@@ -138,6 +138,31 @@ export async function checkVerdict(sha) {
 export const listOpenPRs = () =>
   json(`/repos/${repoSlug()}/pulls?state=open&per_page=50&sort=updated&direction=desc`);
 
+// 自动刷新探针（bughunt P2-5：GitHub 模式以前只在启动/画可/判后拉清单，回前台也不拉）。
+// 与门下 pollEvents 同名同形，ui 用同一套 60s 轮询 + 回前台节奏。配额：探「最近更新的一折」，
+// 带 If-None-Match；没变 → 304，GitHub 不计主配额。变了才报一条 {review_id}，ui 据此重拉清单/批注串。
+// etag 只放内存：每个标签、每次加载首轮只对齐，不当作变化。
+let pollEtag = '';
+export async function pollEvents() {
+  const res = await fetch(`${API}/repos/${repoSlug()}/pulls?state=all&sort=updated&direction=desc&per_page=1`, {
+    cache: 'no-store',
+    headers: {
+      Authorization: `Bearer ${getToken()}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      ...(pollEtag ? { 'If-None-Match': pollEtag } : {}),
+    },
+  });
+  if (res.status === 304) return { items: [], initial: false };
+  if (!res.ok) throw new ApiError(res, '');
+  const initial = !pollEtag;
+  const etag = res.headers.get('etag') || res.headers.get('ETag') || '';
+  const changed = !initial && etag !== pollEtag;
+  pollEtag = etag;
+  const top = changed ? (await res.json())?.[0] : null;
+  return { items: top ? [{ review_id: top.number }] : [], initial };
+}
+
 // 已画可的折子（归档）：closed 里挑真正 merge 过的
 export const listMergedPRs = async () => {
   // 分页取全：closed 里还混着「关而未合」的，只取前 50 条归档多了必漏
