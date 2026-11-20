@@ -43,6 +43,7 @@ export const verifyToken = fwd('verifyToken');
 // ── 读面 ──
 export const listOpenPRs = fwd('listOpenPRs');
 export const listMergedPRs = fwd('listMergedPRs');
+export const listClosedPRs = fwd('listClosedPRs');
 export const listPRFiles = fwd('listPRFiles');
 export const listPRComments = fwd('listPRComments');
 export const listPRCommits = fwd('listPRCommits');

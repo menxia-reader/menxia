@@ -8,6 +8,8 @@ svc-batch-atomic-3
 svc-batch-body-is-note
 svc-batch-posted
 svc-batch-revision-no
+svc-closed-open-readonly
+svc-closed-tab-lists-rejected
 svc-doc-rendered
 svc-events-cursor-advanced
 svc-events-notice

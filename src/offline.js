@@ -260,22 +260,56 @@ export async function removeOutbox(id) {
  * sender 由调用方注入（真实是 github.createIssueComment），便于测试。
  */
 // accept：只发属于当前数据源的项（outboxBelongs），别的原样留着等切回去。io 供测试注入（默认 IDB）。
+//
+// 永久失败（isPermanentFailure）不再重试：项上记 `dead: { status, message }` 留在库里（不丢他打的字），
+// flush 跳过它、「待发 N 条」不数它；ui.js 打开那折时把判文本 + 答题原样填回判框，提示「没发出去：原因」。
+// 升级前入队、缺 answers 的老项补发会吃服务端 400（必答校验），走的也是这条。
 const idbIo = { list: () => listOutbox(), remove: (id) => removeOutbox(id), put: (it) => enqueue(it) };
 export async function flushOutbox(sender, { accept = () => true, io = idbIo } = {}) {
-  const items = (await io.list()).filter(accept);
+  const items = (await io.list()).filter((it) => !it.dead && accept(it));
   let sent = 0, failed = 0;
   for (const it of items) {
     try {
       await sender(it);
       await io.remove(it.id);
       sent += 1;
-    } catch {
+    } catch (err) {
       failed += 1;
       it.tries = (it.tries || 0) + 1;
-      await io.put(it);                           // 回写 tries；仍在队列里
+      if (isPermanentFailure(err)) it.dead = { status: err.status, message: String(err?.message || err.status) };
+      await io.put(it);                           // 回写 tries / dead；仍在库里
     }
   }
   return { sent, failed };
+}
+
+/**
+ * 补发失败是不是「再试也没用」：4xx 是请求本身被拒（必答缺了、折没了、没权限），排队重试永远 4xx。
+ * 例外（留队下次再试）：无 status（断网）、5xx、401（钥匙/登录过期，重新登录后能发）、408、429（限流），
+ * 以及 409 stale_revision（已有处理：补发带 staleAsComment，服务端退成整单评论，正常不会抛到这里）。
+ */
+export function isPermanentFailure(err) {
+  const s = err?.status;
+  if (typeof s !== 'number' || s < 400 || s >= 500) return false;
+  if (s === 401 || s === 408 || s === 429) return false;
+  if (s === 409 && err.code === 'stale_revision') return false;
+  return true;
+}
+
+/** 某折的永久失败项（按入队时间最新的一条；判框只装得下一条）。 */
+export function deadItemFor(queue, pr) {
+  const hits = (queue || []).filter((it) => it.dead && String(it.pr) === String(pr));
+  return hits.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0] || null;
+}
+
+/** 队列里出队后发出的 answers（[{question_id, option_ids?|text}]）→ 判框内部的作答表（qid → {option_ids, text}）。 */
+export function answersToForm(answers) {
+  const out = {};
+  for (const a of answers || []) {
+    if (!a || a.question_id == null) continue;
+    out[a.question_id] = { option_ids: Array.isArray(a.option_ids) ? a.option_ids : [], text: typeof a.text === 'string' ? a.text : '' };
+  }
+  return out;
 }
 
 // —— meta（续读本地镜像等）——

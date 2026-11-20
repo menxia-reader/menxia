@@ -366,6 +366,17 @@ export async function runSvcSmoke(docEl) {
   chk('svc-status-approved', state.review.status === 'approved', state.review.status);
   chk('svc-archived-readonly', Boolean(await waitFor(() => !document.querySelector('.btn-qinci'))));
 
+  // ⑥b 已关栏：被关（rejected）的折不在待审也不在已画可；侧栏「已关」点开才取 status=rejected,withdrawn
+  state.review.status = 'rejected';
+  state.review.closed_at = now();
+  const closedTab = document.querySelector('.list-tab[data-tab="closed"]');
+  closedTab?.click();
+  const closedCard = await waitFor(() => [...document.querySelectorAll('#pr-list .pr-item')].find((el) => el.textContent.includes('门下服务 demo 折')));
+  chk('svc-closed-tab-lists-rejected', Boolean(closedCard) && closedTab?.textContent.trim() === '已关 1', closedTab?.textContent);
+  closedCard?.click();
+  await sleep(300);
+  chk('svc-closed-open-readonly', Boolean(await waitFor(() => docEl.querySelectorAll('[data-line]').length > 10)) && !document.querySelector('.btn-qinci'));
+
   // ⑦ 登出作废 grant
   await logout();
   chk('svc-logout-revokes-grant', state.loggedOut === true && state.revokedVia === 'rfc7009' && getToken() === '');

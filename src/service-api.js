@@ -336,6 +336,11 @@ export const listMergedPRs = () =>
   pagedItems((c) => `/reviews?status=approved&limit=50${c ? `&cursor=${encodeURIComponent(c)}` : ''}`)
     .then((items) => items.map(toPR));
 
+// 已关 = rejected / withdrawn（toPR 给它们 closed_at、merged_at 为空）。侧栏「已关」栏点开才取。
+export const listClosedPRs = () =>
+  pagedItems((c) => `/reviews?status=rejected,withdrawn&limit=50${c ? `&cursor=${encodeURIComponent(c)}` : ''}`)
+    .then((items) => items.map(toPR));
+
 // 详情短缓存：开一折时 listPRFiles / listPRCommits / enrichPR / createIssueComment 连着要同一份。
 const DETAIL_TTL = 5000;
 const details = new Map();   // id → { at, data }

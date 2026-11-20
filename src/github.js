@@ -171,6 +171,13 @@ export const listMergedPRs = async () => {
   return closed.filter((p) => p.merged_at);
 };
 
+// 已关的折子：closed 里没 merge 过的（被关 / 拒）。侧栏「已关」栏点开才取，不进开机请求。
+export const listClosedPRs = async () => {
+  const closed = await paged((page) =>
+    `/repos/${repoSlug()}/pulls?state=closed&per_page=100&page=${page}&sort=updated&direction=desc`);
+  return closed.filter((p) => !p.merged_at);
+};
+
 // 分页取全，避免 >100 文件的 PR 漏掉正文
 export async function listPRFiles(num) {
   const out = [];

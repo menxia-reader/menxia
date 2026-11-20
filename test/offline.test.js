@@ -164,3 +164,65 @@ test('flushOutbox：node 无 IDB → 空队列，sender 一次都不该被调（
   assert.deepEqual(r, { sent: 0, failed: 0 });
   assert.deepEqual(await listOutbox(), []);
 });
+
+// ── 2026-11-19 永久失败退回判框 ──
+import { isPermanentFailure, deadItemFor, answersToForm } from '../src/offline.js';
+
+const httpErr = (status, code, message = `HTTP ${status}`) => Object.assign(new Error(message), { status, code });
+
+test('isPermanentFailure：4xx 永久；断网 / 5xx / 401 / 408 / 429 / 409 stale_revision 可重试', () => {
+  for (const s of [400, 403, 404, 409, 410, 422]) assert.equal(isPermanentFailure(httpErr(s)), true, `${s}`);
+  assert.equal(isPermanentFailure(httpErr(409, 'review_closed')), true);
+  for (const e of [new TypeError('Failed to fetch'), httpErr(500), httpErr(503), httpErr(401), httpErr(408), httpErr(429), httpErr(409, 'stale_revision'), null]) {
+    assert.equal(isPermanentFailure(e), false, String(e?.status ?? e));
+  }
+});
+
+test('flushOutbox：4xx 标 dead 留库（不丢字）、之后不再重试；断网 / 429 留队照旧重试', async () => {
+  const bad = makeOutboxItem({ pr: 'rv_1', body: '改开头', backend: 'service', answers: [{ question_id: 'q1', option_ids: ['a'] }] });
+  const net = makeOutboxItem({ pr: 'rv_2', body: '断网那条', backend: 'service' });
+  const lim = makeOutboxItem({ pr: 'rv_3', body: '限流那条', backend: 'service' });
+  const io = memIo([bad, net, lim]);
+  const calls = [];
+  const sender = async (it) => {
+    calls.push(it.pr);
+    if (it.pr === 'rv_1') throw httpErr(400, 'invalid_argument', '必答题「先改哪头？」没答');
+    if (it.pr === 'rv_2') throw new TypeError('Failed to fetch');
+    throw httpErr(429, 'rate_limited');
+  };
+  await flushOutbox(sender, { io });
+  assert.deepEqual(io.q.get(bad.id).dead, { status: 400, message: '必答题「先改哪头？」没答' });
+  assert.equal(io.q.get(net.id).dead, undefined);
+  assert.equal(io.q.get(lim.id).dead, undefined);
+  assert.equal(io.q.size, 3, '永久失败的也不能删：判文本 + 答题要退回判框');
+  calls.length = 0;
+  await flushOutbox(sender, { io });
+  assert.deepEqual(calls.sort(), ['rv_2', 'rv_3'], 'dead 项不再发——否则每次开机 / 联网都再吃一次 4xx');
+});
+
+test('升级前入队、缺 answers 的老项：补发吃 400 → 同样标 dead 退回', async () => {
+  const legacy = { ...makeOutboxItem({ pr: 'rv_7', body: '老判', backend: 'service' }), tries: 2 };
+  delete legacy.answers;
+  const io = memIo([legacy]);
+  const api = {
+    listIssueComments: async () => [],
+    createIssueComment: async (_pr, _b, opts) => { if (!opts?.answers) throw httpErr(400, 'invalid_argument', 'answers required'); },
+  };
+  await flushOutbox(makeOutboxSender(api), { io });
+  assert.deepEqual(io.q.get(legacy.id).dead, { status: 400, message: 'answers required' });
+});
+
+test('deadItemFor 只挑该折的 dead 项（最新一条）；answersToForm 还原成判框作答表', () => {
+  const a = { ...makeOutboxItem({ pr: 'rv_1', body: '旧' }), createdAt: '2026-11-01T00:00:00Z', dead: { status: 400, message: 'x' } };
+  const b = { ...makeOutboxItem({ pr: 'rv_1', body: '新' }), createdAt: '2026-11-02T00:00:00Z', dead: { status: 422, message: 'y' } };
+  const live = makeOutboxItem({ pr: 'rv_1', body: '还在排队' });
+  const other = { ...makeOutboxItem({ pr: 207, body: 'gh' }), dead: { status: 404, message: 'z' } };
+  assert.equal(deadItemFor([a, live, b, other], 'rv_1').body, '新');
+  assert.equal(deadItemFor([a, live, b, other], 207).body, 'gh');
+  assert.equal(deadItemFor([live], 'rv_1'), null);
+  assert.deepEqual(answersToForm([{ question_id: 'q1', option_ids: ['a'] }, { question_id: 'q2', text: '标题改短' }, null]), {
+    q1: { option_ids: ['a'], text: '' },
+    q2: { option_ids: [], text: '标题改短' },
+  });
+  assert.deepEqual(answersToForm(undefined), {});
+});
