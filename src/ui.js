@@ -47,6 +47,7 @@ import { getBackend, setBackend, nextBackend, isService } from './backend.js';
 import {
   isReadStateComment, parseReadState, shouldPromptJump,
   makeOutboxItem, enqueue, listOutbox, flushOutbox, outboxBelongs, makeOutboxSender, putMeta, getMeta,
+  removeOutbox, deadItemFor, answersToForm,
   cachedFetch, cacheKey,
 } from './offline.js';
 
@@ -177,6 +178,7 @@ function App() {
   // 判框的用途：null=判（request_changes）/ 'approve'=画可 / 'reject'=关。门下折带 questions 时，
   // 画可与关也要先答题，所以复用同一张卡（M3c 缺口 1/2）。GitHub 模式恒 null。
   const [verdictMode, setVerdictMode] = useState(null);
+  const [zongpiSeed, setZongpiSeed] = useState(null);   // 补发永久失败退回判框的那条 {id, text, answers}；放弃/发出即出库
   const [busy, setBusy] = useState(false);
   const [float, setFloat] = useState(null);      // pendingAnchor
   const [commits, setCommits] = useState([]);    // rev 序列 v1..vN（vN=head）
@@ -215,6 +217,7 @@ function App() {
   const [updating, setUpdating] = useState(false);       // 「更新到最新版」进行中（页面随即重载）
   const [pendingJump, setPendingJump] = useState(null);   // 目录页点的那一节，等正文回来再跳
   const [donePrs, setDonePrs] = useState([]);
+  const [closedPrs, setClosedPrs] = useState(null);   // 已关栏：null=还没取（点开才取，不进开机请求）
   const [nextUp, setNextUp] = useState(null);    // 画可后的落地条：下一折是谁——只提示，不自动跳，等他自己踩
   const [q, setQ] = useState('');                // 搜索词：即输即filter标题；回车全折全文
   const [hits, setHits] = useState(null);        // null=没在搜；[]=搜了没命中
@@ -241,7 +244,7 @@ function App() {
   const archived = Boolean(cur?.pr?.merged_at || cur?.pr?.closed_at);
   const canAnnotate = onHead && !archived && !readThrough; // 旧版 / 归档 / 通读一律只读（通读拼全书，行号跨章会撞）
   const happyUrl = parseHappySession(cur?.pr?.body);   // 呈折的那次奏对（agent 埋在 PR body 里）
-  R.current = { cur, drafts, editing, busy, float, docPath, viewed, headSha, onHead, archived, canAnnotate, viewThread, zoomImg, prs, donePrs, dash };
+  R.current = { cur, zongpi, drafts, editing, busy, float, docPath, viewed, headSha, onHead, archived, canAnnotate, viewThread, zoomImg, prs, donePrs, dash };
   // P0 导航栈：清单 → 折 这一步进历史（手机档），popstate 回清单原位。见下方「地址栏」那段。
   const histRef = useRef({ prev: null, popping: false, listY: 0 });
   const openRef = useRef(null);
@@ -275,16 +278,29 @@ function App() {
   // DEMO 一律跳过（冒烟测试不该注册 SW、不该碰 IndexedDB）。
   // outbox 按数据源分隔（bughunt P1-4）：只数、只发当前数据源（GitHub 再分仓）的项，别的留着等切回去
   const outboxMine = (it) => outboxBelongs(it, { backend: BACKEND, repo: gh.repoSlug?.() || '' });
-  const refreshOutboxN = useCallback(async () => { setOutboxN((await listOutbox()).filter(outboxMine).length); }, []);
+  // 永久失败（dead）的不算「待发」：它不会再自动发，计进去就是永远挂着的假数
+  const refreshOutboxN = useCallback(async () => { setOutboxN((await listOutbox()).filter((it) => !it.dead && outboxMine(it)).length); }, []);
+  // 补发被拒（4xx）的判退回这折的判框：判文本 + 答题原样填回，提示原因，让他改一下再判
+  const restoreDead = useCallback(async (prNumber) => {
+    if (DEMO || prNumber == null) return;
+    const it = deadItemFor((await listOutbox()).filter(outboxMine), prNumber);
+    // 判框已开着（他正在写别的 / 已填回过）就不动，免得冲掉手上的字
+    if (!it || R.current.cur?.pr.number !== prNumber || R.current.zongpi) return;
+    setVerdictMode(null);
+    setZongpiSeed({ id: it.id, text: it.body || '', answers: answersToForm(it.answers) });
+    setZongpi(true);
+    setTimeout(() => setNotice(S.offline.dead(it.dead.message)), 0);   // 熬过 openPR 的 setNotice('')
+  }, []);
   const flushOut = useCallback(async () => {
-    // 逐条把待发判发出去；成功即出队。sender 抛错的留队可重试（见 offline.flushOutbox）。
+    // 逐条把待发判发出去；成功即出队。sender 抛错的留队可重试，4xx 永久失败标 dead（见 offline.flushOutbox）。
     // sender 带 answers（P1-3）、幂等键 + 失败过先查重（P2-4）。
     await flushOutbox(makeOutboxSender(gh), { accept: outboxMine });
     await refreshOutboxN();
     // 刚 flush 完，若当前正看着那折，重拉一次让新判显示。
     const c = R.current.cur;
-    if (c) loadComments(c.pr.number);
-  }, [refreshOutboxN]);
+    if (c) { loadComments(c.pr.number); restoreDead(c.pr.number); }
+  }, [refreshOutboxN, restoreDead]);
+  useEffect(() => { restoreDead(cur?.pr?.number); }, [cur?.pr?.number, restoreDead]);
 
   useEffect(() => {
     if (DEMO) return undefined;
@@ -374,7 +390,7 @@ function App() {
   }
   async function svcLogout() {
     try { await gh.logout(); } catch { /* 本地已清 */ }
-    setCur(null); setPrs([]); setDonePrs([]);
+    setCur(null); setPrs([]); setDonePrs([]); setClosedPrs(null);
     setPhase('setup'); setSetupMsg(S.backend.loggedOut);
   }
 
@@ -394,6 +410,12 @@ function App() {
     if (Object.values(map).some((v) => v?.state === 'unreadable')) {
       setNotice(S.check.unreadableNotice);
     }
+  }
+
+  // 已关（被关 / 撤回而未画可）：每次点开栏重取一次；取不到当空，不拦读折主线
+  function loadClosed() {
+    if (!api.listClosedPRs) { setClosedPrs([]); return; }
+    api.listClosedPRs().then(setClosedPrs, (err) => { setClosedPrs((v) => v || []); say(S.nav.closedFailed(err?.message || err)); });
   }
 
   async function loadPRs() {
@@ -465,6 +487,7 @@ function App() {
     setFloat(null);
     editElsewhere(null);  // 换折前收掉空草稿：它存进的是**上一折**的 localStorage，回来还会堵在那儿
     setZongpi(false);
+    setZongpiSeed(null);
     setDocErr(null);
     setDocPath(null);
     setDocTick(0);
@@ -1312,6 +1335,14 @@ function App() {
   // 这折要答的题（门下详情里的 questions；GitHub 恒空）
   const svcQuestions = cur?.pr?.svc?.questions || [];
 
+  // 退回判框的那条：发出 / 重新入队 / 放弃 都让它出库（放弃＝他看过原因、决定不发了）
+  function dropSeed() {
+    const s = zongpiSeed;
+    if (!s) return;
+    setZongpiSeed(null);
+    removeOutbox(s.id).then(refreshOutboxN);
+  }
+
   async function sendZongpi(text, answers = []) {
     const c = R.current.cur;
     const v = text.trim();
@@ -1324,6 +1355,7 @@ function App() {
     try {
       // ref = 打开（或轮询重开）这折时的 head：判落在他读的版本上，推了新版服务端 409，提示刷新、正文留在判框（P2-1）
       await api.createIssueComment(c.pr.number, v, { answers, ref: c.pr.head?.sha });
+      dropSeed();
       setZongpi(false);
       loadComments(c.pr.number); // 重拉：让刚呈的判立刻显示在折首
       setZongpiOpen(true);       // 折叠组默认收起，自己刚发的那条必须展开给他看见——否则回到「只能发不能看」
@@ -1333,6 +1365,7 @@ function App() {
       // 真错误（403/422 等有 .status）→ 照旧报错，那不是网络问题，排队也发不出去。
       const offline = !DEMO && typeof err?.status !== 'number' && (await enqueue(makeOutboxItem({ pr: c.pr.number, body: v, answers, backend: BACKEND, repo: gh.repoSlug?.() || '', ref: c.pr.head?.sha || null })));
       if (offline) {
+        dropSeed();               // 改过的版本已重新入队，退回来的旧项出库
         setZongpi(false);
         await refreshOutboxN();
         say(S.zongpi.queued);
@@ -1866,7 +1899,8 @@ function App() {
         qian=${qian} onQian=${setQian}
         onQuery=${(v) => { setQ(v); if (hits) setHits(null); }}
         onSearch=${runSearch} onClearSearch=${clearSearch} onJumpToHit=${jumpToHit}
-        onTab=${(t) => { setTab(t); setDash(false); }} onOpenPR=${(pr) => { setDash(false); openPR(pr); }}
+        closedPrs=${closedPrs}
+        onTab=${(t) => { setTab(t); setDash(false); if (t === 'closed') loadClosed(); }} onOpenPR=${(pr) => { setDash(false); openPR(pr); }}
         onOpenElsewhere=${(pr, t) => { setTab(t); setDash(false); openPR(pr); }}
         onDash=${() => setDash((d) => !d)}
         onSettings=${() => { setPhase('setup'); setSetupMsg(''); }}
@@ -1978,8 +2012,8 @@ function App() {
             ${docErr ? html`<article id="doc"><p class="state err">${docErr}</p></article>`
               : html`<article id="doc" key="doc-island" ref=${docRef}></article>`}
             <div id="margin-col" class="margin-col">
-              ${zongpi && html`<${ZongpiCard} busy=${busy} onSend=${sendZongpi} questions=${svcQuestions}
-                verdict=${verdictMode || 'request_changes'} onClose=${() => { setZongpi(false); setVerdictMode(null); }} />`}
+              ${zongpi && html`<${ZongpiCard} key=${zongpiSeed?.id || 'zongpi'} seed=${zongpiSeed} busy=${busy} onSend=${sendZongpi} questions=${svcQuestions}
+                verdict=${verdictMode || 'request_changes'} onClose=${() => { dropSeed(); setZongpi(false); setVerdictMode(null); }} />`}
               ${marginItems.map((m) => m.el)}
               ${others > 0 && html`<p class="margin-note">${S.margin.otherDocs(others)}</p>`}
             </div>

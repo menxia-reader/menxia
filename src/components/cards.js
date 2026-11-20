@@ -80,10 +80,11 @@ export function ShownThread({ t, blockLine, outdated, hydrate, onExpand }) {
 // 判框。门下服务模式下还承担「拍板」：questions（服务端 QuestionSchema：id/prompt/kind/options/required）
 // 渲成选项/自由文本，onSend(text, answers[]) 带结构化作答；verdict 决定标题与按钮字样
 // （request_changes=判 / approve=画可 / reject=关）。GitHub 模式 questions 恒空，长相与行为不变。
-export function ZongpiCard({ busy, onSend, onClose, questions = [], verdict = 'request_changes' }) {
+// seed：离线补发永久失败退回来的那条（{ text, answers: qid → {option_ids,text} }），原样填回让他改一下再判。
+export function ZongpiCard({ busy, onSend, onClose, questions = [], verdict = 'request_changes', seed = null }) {
   const taRef = useRef();
   const boxRef = useRef();
-  const [answers, setAnswers] = useState({});   // qid → { option_ids: [], text: '' }
+  const [answers, setAnswers] = useState(seed?.answers || {});   // qid → { option_ids: [], text: '' }
   const [qErr, setQErr] = useState('');
   const ansOf = (q) => answers[q.id] || { option_ids: [], text: '' };
   const toggle = (q, oid) => setAnswers((a) => {
@@ -150,7 +151,7 @@ export function ZongpiCard({ busy, onSend, onClose, questions = [], verdict = 'r
             </fieldset>`)}
           ${qErr && html`<div class="decision-err">${qErr}</div>`}
         </div>`}
-      <textarea class="anno-input" ref=${taRef} rows="4" placeholder=${verdict === 'request_changes' ? S.card.zongpiPlaceholder : S.decision.notePlaceholder}></textarea>
+      <textarea class="anno-input" ref=${taRef} rows="4" defaultValue=${seed?.text || ''} placeholder=${verdict === 'request_changes' ? S.card.zongpiPlaceholder : S.decision.notePlaceholder}></textarea>
       <div class="anno-row">
         <button class="anno-ghost" onMouseDown=${(e) => e.preventDefault()} onClick=${onClose}>${S.action.discard}</button>
         <button class="anno-save" onMouseDown=${(e) => e.preventDefault()} onClick=${send}>${busy ? S.action.sending : sendLabel}</button>

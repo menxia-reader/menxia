@@ -61,8 +61,9 @@ function folderCard({ pr, cur, timeAgo, checks, verifyCounts, onOpenPR, shelf = 
               <button key=${pr.number} class=${'pr-item' + (cur?.pr.number === pr.number ? ' active' : '') + (pr.merged_at ? ' pr-done' : '') + (unread ? ' pr-unread' : '')}
                 onClick=${() => onOpenPR(pr)}>
                 <h3>${pr.title}</h3>
-                <div class="meta">#${pr.number} · ${pr.merged_at ? S.folder.mergedAt(timeAgo(pr.merged_at)) : S.folder.submittedAt(timeAgo(pr.updated_at))}${
-                  pr.merged_at ? null : checkBadge(checks[pr.number])}${verifyBadge(verifyCounts[pr.number])}${
+                <div class="meta">#${pr.number} · ${pr.merged_at ? S.folder.mergedAt(timeAgo(pr.merged_at))
+                  : pr.closed_at ? S.nav.closedAt(timeAgo(pr.closed_at)) : S.folder.submittedAt(timeAgo(pr.updated_at))}${
+                  pr.merged_at || pr.closed_at ? null : checkBadge(checks[pr.number])}${verifyBadge(verifyCounts[pr.number])}${
                   unread ? html`<span class="unread-chip">${S.shelf.unreadChip}</span>` : null}${
                   kind ? html`<span class="kind-chip">${kind}</span>` : null}${
                   qians.map((w) => html`<span class="qian-chip" key=${'q' + w}>${w}</span>`)}</div>
@@ -81,7 +82,7 @@ function qianCounts(prs, donePrs) {
 }
 
 export function Sidebar({
-  q, hits, searching, prs, donePrs, tab, cur, demo, timeAgo, checks = {}, verifyCounts = {},
+  q, hits, searching, prs, donePrs, closedPrs = null, tab, cur, demo, timeAgo, checks = {}, verifyCounts = {},
   qian = null, onQian = () => {},
   onQuery, onSearch, onClearSearch, onJumpToHit, onTab, onOpenPR, onSettings, onDash,
   onOpenElsewhere = null, onGripDown = null, onGripReset = null,
@@ -105,8 +106,12 @@ export function Sidebar({
   const counts = splitShelf(prs);                // 不受过滤，喂 tab 上的数字
   const shelf = shelfOf(prs.filter(match), donePrs.filter(match));
   const shelfCount = counts.shelf.length + shelfOf(prs, donePrs).done.length;
-  const list = tab === 'done' ? donePrs.filter(match) : tab === 'shelf' ? [...shelf.unread, ...shelf.done] : split.desk;
-  const emptyMsg = tab === 'done' ? S.nav.emptyDone : tab === 'shelf' ? S.nav.emptyShelf : S.nav.emptyOpen;
+  // 第四个 tab「已关」（2026-11-19）：被关 / 撤回而未画可的折，原先两栏都看不到。只读回看（closed_at → archived）。
+  // 点开才取（ui.js loadClosed），closedPrs=null 时 tab 不带数、清单显示「正在取」。不进签集与跨栏搜索——它不是在办的折。
+  const list = tab === 'done' ? donePrs.filter(match) : tab === 'shelf' ? [...shelf.unread, ...shelf.done]
+    : tab === 'closed' ? (closedPrs || []).filter(match) : split.desk;
+  const emptyMsg = tab === 'done' ? S.nav.emptyDone : tab === 'shelf' ? S.nav.emptyShelf
+    : tab === 'closed' ? (closedPrs ? S.nav.emptyClosed : S.nav.closedLoading) : S.nav.emptyOpen;
   const card = (pr, extra = {}) => folderCard({ pr, cur, timeAgo, checks, verifyCounts, onOpenPR, ...extra });
   // 过滤只看当前栏会漏：他在书架栏搜 #174，而那折在待审。当前栏没命中、或查的是折号时，
   // 把别的栏的命中也列出来、标明在哪栏，点了切过去打开（2026-10-27 报告）。
@@ -167,6 +172,7 @@ export function Sidebar({
           <button data-tab="open" aria-pressed=${tab === 'open'} class=${'list-tab' + (tab === 'open' ? ' active' : '')} onClick=${() => onTab('open')}>${S.nav.tabOpen(counts.desk.length)}</button>
           <button data-tab="done" aria-pressed=${tab === 'done'} class=${'list-tab' + (tab === 'done' ? ' active' : '')} onClick=${() => onTab('done')}>${S.nav.tabDone(donePrs.length)}</button>
           <button data-tab="shelf" aria-pressed=${tab === 'shelf'} class=${'list-tab list-tab-shelf' + (tab === 'shelf' ? ' active' : '')} onClick=${() => onTab('shelf')}>${S.nav.tabShelf(shelfCount)}</button>
+          <button data-tab="closed" aria-pressed=${tab === 'closed'} class=${'list-tab list-tab-shelf' + (tab === 'closed' ? ' active' : '')} onClick=${() => onTab('closed')}>${S.nav.tabClosed(closedPrs ? closedPrs.length : null)}</button>
           ${onDash && html`<button class="list-tab dash-btn" title=${S.nav.dashTitle} onClick=${onDash}>${S.nav.dash}</button>`}
         </div>
         <nav id="pr-list" class=${tab === 'shelf' ? 'shelf-list' : ''}>

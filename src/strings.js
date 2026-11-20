@@ -162,6 +162,12 @@ export const S = deepFreeze({
     emptyOpen: '此刻无折可批。',
     emptyDone: '还没有画可过的折子。',
     emptyShelf: '还没有读毕的书。',
+    // 已关（2026-11-19）：被关 / 撤回而未画可的折，两栏都不收，单开一栏只读回看。点开才取，数字取到后才显示。
+    tabClosed: (n) => (n == null ? '已关' : `已关 ${n}`),
+    emptyClosed: '没有被关掉的折子。',
+    closedLoading: '正在取已关的折…',
+    closedFailed: (msg) => `已关的折没取到：${msg}`,
+    closedAt: (ago) => `关于 ${ago}`,
     settings: '设置 · 钥匙',
     dash: '总览',
     dashTitle: '按项目摊开待审的折，看谁等谁、谁盖了谁',
@@ -486,6 +492,7 @@ export const S = deepFreeze({
   // M2 离线包
   offline: {
     outbox: (n) => `待发 ${n} 条判 · 联网自动补发`,
+    dead: (why) => `没发出去：${why}，改一下再判`,
     copy: (ago) => `离线副本 · 截至 ${ago}`,
     jumpAsk: '上次读到别处',
     jumpGo: '跳到上次位置',
