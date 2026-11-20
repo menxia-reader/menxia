@@ -167,7 +167,7 @@ async function handle(url, init) {
     const b = body();
     if (!['open', 'changes_requested'].includes(state.review.status)) return ERR(409, 'review_closed');
     if (b.revision_no !== cur().revision_no) return ERR(409, 'stale_revision');
-    if (b.verdict === 'approve' && state.review.status === 'changes_requested') return ERR(409, 'conflict', 'changes_requested 上不能直接 approve，须等新版本');
+    // D-17（menxia-service #40）：changes_requested 上拍板人可对当前版本 approve/reject，不再 409 conflict。
     // 必答校验，与 services/reviews.ts createDecision 同判据
     const answers = b.answers || [];
     for (const qd of state.review.questions) {
@@ -341,6 +341,20 @@ export async function runSvcSmoke(docEl) {
   chk('svc-judge-revision-no', d1?.revision_no === 2);
   chk('svc-status-changes-requested', state.review.status === 'changes_requested' || state.revisions.length === 3, state.review.status);
   chk('svc-judge-shown-in-thread', Boolean(await waitFor(() => document.body.textContent.includes('开头先改，结尾留着。'))));
+
+  // ④b D-17：判后（changes_requested）同版本直接画可应成功，不再 409。探完回滚状态，不影响后面的流程。
+  if (state.revisions.length === 2 && state.review.status === 'changes_requested') {
+    const snap = { status: state.review.status, closed: state.review.closed_at, upd: state.review.updated_at, nd: state.decisions.length, ne: state.events.length };
+    const r = await window.fetch(`${API_BASE}/reviews/${RID}/decisions`, {
+      method: 'POST', headers: { 'content-type': 'application/json', Authorization: `Bearer ${state.tokens.access}` },
+      body: JSON.stringify({ revision_no: 2, verdict: 'approve', answers: [{ question_id: 'q1', option_ids: ['a'] }] }),
+    });
+    chk('svc-approve-after-judge-same-version', r.status === 201 && state.review.status === 'approved', `status=${r.status} review=${state.review.status}`);
+    state.decisions.length = snap.nd; state.events.length = snap.ne;
+    state.review.status = snap.status; state.review.closed_at = snap.closed; state.review.updated_at = snap.upd;
+  } else {
+    chk('svc-approve-after-judge-same-version', false, `前置不满足 rev=${state.revisions.length} status=${state.review.status}`);
+  }
 
   // ⑤ agent 推新版（事件 revision.created）→ 增量刷新把当前折切到 v3
   await waitFor(() => state.revisions.length === 3, 2000);
