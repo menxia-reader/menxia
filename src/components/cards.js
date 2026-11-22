@@ -85,23 +85,43 @@ export function ZongpiCard({ busy, onSend, onClose, questions = [], verdict = 'r
   const taRef = useRef();
   const boxRef = useRef();
   const [answers, setAnswers] = useState(seed?.answers || {});   // qid → { option_ids: [], text: '' }
-  const [qErr, setQErr] = useState('');
+  // 拦下时不许静默（rv_01M810…：必答没答点呈「像坏了一样」）：qErr = { qid, msg } 标红那一题并在题下给一行提示；
+  // noteErr = 判（request_changes）判语为空——原先 ui.js 的 `if (!v) return` 一声不吭。
+  const [qErr, setQErr] = useState(null);
+  const [noteErr, setNoteErr] = useState('');
   const ansOf = (q) => answers[q.id] || { option_ids: [], text: '' };
-  const toggle = (q, oid) => setAnswers((a) => {
+  const clearErrFor = (q) => setQErr((e) => (e && e.qid === q.id ? null : e));
+  const toggle = (q, oid) => { clearErrFor(q); setAnswers((a) => {
     const cur = ansOf(q).option_ids;
     const next = q.kind === 'single_choice' ? [oid] : (cur.includes(oid) ? cur.filter((x) => x !== oid) : [...cur, oid]);
     return { ...a, [q.id]: { ...ansOf(q), option_ids: next } };
-  });
-  const setText = (q, text) => setAnswers((a) => ({ ...a, [q.id]: { ...ansOf(q), text } }));
+  }); };
+  const setText = (q, text) => { clearErrFor(q); setAnswers((a) => ({ ...a, [q.id]: { ...ansOf(q), text } })); };
+  // 把未答的那题滚进卡内可视区并把焦点放到它的第一个输入上（卡是 fixed + 自身可滚，见 style.css .zongpi-card）
+  const focusQuestion = (qid) => setTimeout(() => {
+    const fs = boxRef.current?.querySelector(`.decision-q[data-qid="${CSS.escape(qid)}"]`);
+    if (!fs) return;
+    fs.scrollIntoView({ block: 'nearest' });
+    fs.querySelector('input')?.focus({ preventScroll: true });
+  }, 0);
   const send = () => {
     const out = [];
     for (const q of questions) {
       const a = ansOf(q);
       const empty = q.kind === 'free_text' ? !a.text.trim() : !a.option_ids.length;
-      if (empty) { if (q.required !== false) { setQErr(S.decision.answerRequired(q.prompt)); return; } continue; }
+      if (empty) {
+        if (q.required !== false) { setNoteErr(''); setQErr({ qid: q.id, msg: S.decision.answerRequired(q.prompt) }); focusQuestion(q.id); return; }
+        continue;
+      }
       out.push(q.kind === 'free_text' ? { question_id: q.id, text: a.text.trim() } : { question_id: q.id, option_ids: a.option_ids });
     }
-    setQErr('');
+    setQErr(null);
+    if (verdict === 'request_changes' && !taRef.current.value.trim()) {
+      setNoteErr(S.decision.noteRequired);
+      taRef.current.focus();
+      return;
+    }
+    setNoteErr('');
     onSend(taRef.current.value, out);
   };
   const header = verdict === 'approve' ? S.decision.approveHeader : verdict === 'reject' ? S.decision.rejectHeader : S.card.zongpiHeader;
@@ -137,7 +157,8 @@ export function ZongpiCard({ busy, onSend, onClose, questions = [], verdict = 'r
       ${questions.length > 0 && html`
         <div class="decision-questions">
           ${questions.map((q) => html`
-            <fieldset class="decision-q" key=${q.id} data-qid=${q.id}>
+            <fieldset class=${'decision-q' + (qErr?.qid === q.id ? ' decision-q-missing' : '')} key=${q.id} data-qid=${q.id}
+              aria-invalid=${qErr?.qid === q.id ? 'true' : undefined}>
               <legend>${q.prompt}${q.required === false ? S.decision.optional : ''}</legend>
               ${q.kind === 'free_text'
                 ? html`<input class="decision-text" type="text" maxlength="4000" value=${ansOf(q).text}
@@ -148,10 +169,12 @@ export function ZongpiCard({ busy, onSend, onClose, questions = [], verdict = 'r
                       checked=${ansOf(q).option_ids.includes(o.id)} onChange=${() => toggle(q, o.id)} />
                     <span>${o.label}</span>
                   </label>`)}
+              ${qErr?.qid === q.id && html`<div class="decision-err" role="alert">${qErr.msg}</div>`}
             </fieldset>`)}
-          ${qErr && html`<div class="decision-err">${qErr}</div>`}
         </div>`}
-      <textarea class="anno-input" ref=${taRef} rows="4" defaultValue=${seed?.text || ''} placeholder=${verdict === 'request_changes' ? S.card.zongpiPlaceholder : S.decision.notePlaceholder}></textarea>
+      <textarea class="anno-input" ref=${taRef} rows="4" defaultValue=${seed?.text || ''} placeholder=${verdict === 'request_changes' ? S.card.zongpiPlaceholder : S.decision.notePlaceholder}
+        onInput=${() => noteErr && setNoteErr('')}></textarea>
+      ${noteErr && html`<div class="decision-err decision-note-err" role="alert">${noteErr}</div>`}
       <div class="anno-row">
         <button class="anno-ghost" onMouseDown=${(e) => e.preventDefault()} onClick=${onClose}>${S.action.discard}</button>
         <button class="anno-save" onMouseDown=${(e) => e.preventDefault()} onClick=${send}>${busy ? S.action.sending : sendLabel}</button>
