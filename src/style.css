@@ -542,6 +542,9 @@ article a img { cursor: pointer; }   /* 包在链接里的图走链接，别谎�
   z-index: 26; margin: 0; padding: 14px 16px;
   background: var(--paper-raised); border: 1px solid var(--rule); border-left: 2px solid var(--cinnabar);
   box-shadow: 0 6px 24px var(--shadow);
+  /* 题多/手机矮屏时卡会比视口高：居中 fixed 会把顶部的题和提示推到屏幕外，点呈像没反应。
+     限高 + 卡内滚，未答题的 scrollIntoView 才滚得到。 */
+  max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); overflow-y: auto;
 }
 /* 眉批卡跟着 --read-scale 走，但**只放大要读的字**：引文、批注正文、输入框。
    .anno-src 这类「谁·什么时候」的元信息标签不动——它们是标签不是读物，跟着涨只会
@@ -1612,5 +1615,8 @@ html[data-style="c"] .dash-row.active::before { display: none; }
 .decision-opt { display: inline-flex; align-items: center; gap: .3rem; margin: .15rem .9rem .15rem 0; font-size: .92em; cursor: pointer; }
 .decision-text { width: 100%; box-sizing: border-box; font: inherit; font-size: .92em; padding: .25rem .4rem; }
 .decision-err { color: var(--err, #b3261e); font-size: .85em; margin-top: .2rem; }
+/* 必答没答点呈：那一题标红（不许静默，rv_01M810…） */
+.decision-q-missing { border-color: var(--err, #b3261e); box-shadow: 0 0 0 1px var(--err, #b3261e); }
+.decision-q-missing legend { color: var(--err, #b3261e); opacity: 1; }
 .zongpi-card.verdict-approve .anno-src { font-weight: 600; }
 .zongpi-card.verdict-reject .anno-src { font-weight: 600; }

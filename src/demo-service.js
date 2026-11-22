@@ -329,9 +329,27 @@ export async function runSvcSmoke(docEl) {
     // 必答题没答就呈：判框自己拦下并提示，不打服务端
     [...document.querySelectorAll('.anno-save')].pop()?.click();
     chk('svc-judge-requires-answer', Boolean(await waitFor(() => document.querySelector('.decision-err'))) && state.decisions.length === 0);
+    // 不许静默（rv_01M810…「点呈没反应」）：未答的那题标红、题下一行「先回答：…」、焦点落到该题、提示在视口内
+    const q1 = document.querySelector('.decision-q[data-qid="q1"]');
+    chk('svc-judge-missing-marked', Boolean(q1?.classList.contains('decision-q-missing')), q1?.className);
+    const hint = q1?.querySelector('.decision-err');
+    chk('svc-judge-missing-hint', /^先回答：「先改哪头？」/.test(hint?.textContent || ''), hint?.textContent);
+    chk('svc-judge-missing-focused', Boolean(q1?.contains(document.activeElement)), document.activeElement?.outerHTML?.slice(0, 80));
+    const hr = hint?.getBoundingClientRect();
+    chk('svc-judge-missing-in-viewport', Boolean(hr) && hr.top >= 0 && hr.bottom <= window.innerHeight, JSON.stringify(hr));
     document.querySelector('.decision-q[data-qid="q1"] input[value="a"]')?.click();
+    await sleep(60);
+    chk('svc-judge-missing-cleared-on-answer', !document.querySelector('.decision-q-missing'));
     const ft = document.querySelector('.decision-q[data-qid="q2"] .decision-text');
     if (ft) { ft.value = '标题也顺手改短'; ft.dispatchEvent(new Event('input', { bubbles: true })); }
+    // 题答了、判语空：同样不许静默
+    ta.value = '';
+    await sleep(60);
+    [...document.querySelectorAll('.anno-save')].pop()?.click();
+    const noteErr = await waitFor(() => document.querySelector('.zongpi-card .decision-note-err'));
+    chk('svc-judge-empty-note-warns', /判语/.test(noteErr?.textContent || '') && state.decisions.length === 0, noteErr?.textContent);
+    ta.value = '开头先改，结尾留着。';
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
     await sleep(60);
     [...document.querySelectorAll('.anno-save')].pop()?.click();
   }
