@@ -89,6 +89,25 @@ export const S = deepFreeze({
     eventsRefreshed: (n) => `门下有 ${n} 条新动态，清单已刷新。`,
   },
 
+  // 「更新」（门下服务 D-19）：派任务把放久了的折子重核一遍、推一版新的
+  refreshReq: {
+    btn: '更新',
+    btnBusy: '更新中…',
+    btnTitle: '派任务把这折重核一遍、出新版（放久了不新鲜时用）',
+    askTitle: '更新这折',
+    askPlaceholder: '要更新什么（可不填）：比如价格再核一遍',
+    askOk: '确认',
+    askCancel: '取消',
+    queued: '更新：排队中',
+    running: '更新：更新中…',
+    done: (n) => `已更新到第 ${n} 版`,
+    doneReload: '刷新看新版',
+    failed: (why) => `没更新成${why ? `：${why}` : ''}`,
+    retry: '重试',
+    dismiss: '知道了',
+    sendFailed: (msg) => `更新没发出去：${msg}`,
+  },
+
   // 拍板（门下服务）：判框里按 questions 作答；画可 / 关 / 留
   decision: {
     approveHeader: '画可 · 定稿前先答「待你拍板」',

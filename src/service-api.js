@@ -323,6 +323,9 @@ export function toPR(r) {
       status: r.status, role: r.role, is_decider: r.is_decider, read_state: r.read_state || null,
       revision_no: r.current_revision_no, unread: r.read_state?.state === 'unread' || !r.read_state?.state,
       questions: Array.isArray(r.questions) ? r.questions : [],
+      is_owner: r.is_owner,
+      // D-19「更新」：最新一条请求或 null（只在详情里有；清单项缺这个字段 → undefined，表示「不知道」）
+      refresh: r.refresh === undefined ? undefined : (r.refresh || null),
     },
   };
 }
@@ -540,6 +543,27 @@ export async function questionsOf(id) {
   const d = details.get(id)?.data || await getDetail(id);
   return Array.isArray(d?.questions) ? d.questions : [];
 }
+
+// ───────────────────────── 「更新」（D-19，menxia-service #41）─────────────────────────
+// 折子放了几周不新鲜了：派任务让 agent 重核一遍、推一版新的。服务端幂等——已有 queued/running 就 200 回那一条，
+// 所以连点、两台设备同时点都只会有一条在跑。done 后单子多一个 revision（原来 approved/rejected 的回到 open）。
+// withdrawn → 409 review_closed；非 owner/拍板人 → 403。
+export async function requestRefresh(id, note = '') {
+  const n = String(note || '').trim().slice(0, 1000);
+  try {
+    const r = await post(`/reviews/${encodeURIComponent(id)}/refresh-requests`, n ? { note: n } : {});
+    details.delete(id);
+    return r;
+  } catch (err) {
+    if (err?.status === 409 && err.code === 'review_closed') err.message = '这折已撤回，不能更新';
+    else if (err?.status === 403) err.message = '只有拍板人能发起更新';
+    throw err;
+  }
+}
+
+/** 最新一条「更新」请求或 null。列表按 created_at 倒序（openapi），取第一条。 */
+export const latestRefresh = (id) =>
+  json(`/reviews/${encodeURIComponent(id)}/refresh-requests`).then((r) => r?.items?.[0] || null);
 
 // ───────────────────────── 阅读状态 / 续读位置 ─────────────────────────
 const putState = (id, body) => post(`/reviews/${encodeURIComponent(id)}/read-state`, body, 'PUT');

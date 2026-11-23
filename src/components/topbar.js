@@ -9,6 +9,53 @@ import { S } from '../strings.js';
 import { isShelved } from '../track.js';
 import { READ_STEPS, percentOf } from '../readsize.js';
 
+// ── 「更新」小框与状态条（门下 D-19）。纯展示：状态取舍在 refreshBarState，组件测试直接测它。 ──
+export const refreshPending = (req) => req?.status === 'queued' || req?.status === 'running';
+
+/** req（RefreshRequest + live）→ 该显示什么；null＝不显示。
+ *  done 只在「本次会话亲眼看着它完成」（live）或「正在读的版本比结果旧」时显示——否则每次开折都挂一条旧消息。 */
+export function refreshBarState(req, viewedNo = null) {
+  if (!req) return null;
+  if (req.status === 'queued') return { kind: 'queued', text: S.refreshReq.queued };
+  if (req.status === 'running') return { kind: 'running', text: S.refreshReq.running };
+  if (req.status === 'failed') return { kind: 'failed', text: S.refreshReq.failed(req.error || '') };
+  if (req.status === 'done') {
+    const n = req.result_revision_no;
+    const behind = n != null && viewedNo != null && viewedNo < n;
+    if (!req.live && !behind) return null;
+    return { kind: 'done', text: S.refreshReq.done(n ?? '?'), reload: behind };
+  }
+  return null;
+}
+
+export function RefreshBar({ req, viewedNo, onReload, onRetry, onDismiss }) {
+  const st = refreshBarState(req, viewedNo);
+  if (!st) return null;
+  return html`<div class=${`refresh-bar refresh-${st.kind}`} role="status">
+    <span class="refresh-text">${st.text}</span>
+    ${st.kind === 'done' && st.reload && onReload && html`<button class="refresh-act refresh-reload" onClick=${onReload}>${S.refreshReq.doneReload}</button>`}
+    ${st.kind === 'failed' && onRetry && html`<button class="refresh-act refresh-retry" onClick=${onRetry}>${S.refreshReq.retry}</button>`}
+    ${st.kind === 'done' && !st.reload && onDismiss && html`<button class="refresh-act refresh-dismiss" onClick=${onDismiss}>${S.refreshReq.dismiss}</button>`}
+  </div>`;
+}
+
+export function RefreshAsk({ onSubmit, onCancel }) {
+  const submit = (e) => {
+    e.preventDefault();
+    const ta = e.currentTarget.querySelector('textarea');
+    onSubmit?.(ta ? ta.value : '');
+  };
+  return html`<form class="refresh-ask" role="dialog" aria-label=${S.refreshReq.askTitle} onSubmit=${submit}>
+    <b class="refresh-ask-title">${S.refreshReq.askTitle}</b>
+    <textarea class="refresh-note" rows="2" maxlength="1000" placeholder=${S.refreshReq.askPlaceholder}
+      onKeyDown=${(e) => { if (e.key === 'Escape') onCancel?.(); }}></textarea>
+    <span class="refresh-ask-btns">
+      <button type="submit" class="btn-primary refresh-ok">${S.refreshReq.askOk}</button>
+      <button type="button" class="btn-ghost refresh-cancel" onClick=${onCancel}>${S.refreshReq.askCancel}</button>
+    </span>
+  </form>`;
+}
+
 export function Topbar({
   cur, archived, onHead, busy, draftCount, verifyN = 0, happyUrl, stale, notice, carrying,
   readStep = 1, onReadStep, widthPreset = 'fill', onWidthPreset, moreOpen = false, onMore, onUpdate, updating = false,
@@ -16,6 +63,9 @@ export function Topbar({
   backend = 'github', onBackend, loggedIn = false, onLogin, onLogout,
   onRefresh, onCopyRef, onCarry, onZongpi, onSubmit, onQinci, onReject, onShelve,
   nextUp, onNextUp, onNoticeClose,
+  // 「更新」（门下 D-19，docs/REFRESH-BUTTON.md）：onRefreshReq 为 null＝不露按钮（GitHub 源 / withdrawn / 非拍板人）
+  onRefreshReq = null, refreshReq = null, refreshAsk = false, viewedNo = null,
+  onRefreshSubmit, onRefreshCancel, onRefreshReload, onRefreshRetry, onRefreshDismiss,
 }) {
   const pct = percentOf(readStep);
   // 面包屑根词跟折的实际归属走：遗留闲读折在读毕书架（未画可组）、画可折在已画可。写死「待审」
@@ -51,6 +101,9 @@ export function Topbar({
                  （style.css）。里面全是「对着正文但不常按」的动作，顺序按常用度排。 */ ''}
             ${hasMore && html`
               <span class="more-menu" role="menu">
+                ${/* 「更新」排菜单第一项：题签行只露 判/呈/可/⋯ 的约定不破，又是打开菜单第一眼看到的。 */ ''}
+                ${cur && onRefreshReq && html`<button class="btn-ghost more-item refresh-req-btn" title=${S.refreshReq.btnTitle}
+                  disabled=${refreshPending(refreshReq)} onClick=${onRefreshReq}>${refreshPending(refreshReq) ? S.refreshReq.btnBusy : S.refreshReq.btn}</button>`}
                 ${refreshBtn}
                 <button class="btn-ghost more-item" title=${S.action.copyRefTitle} onClick=${onCopyRef}>${S.action.copyRef}</button>
                 ${happyUrl && html`<button class="btn-ghost more-item" title=${S.action.happyTitle}
@@ -91,6 +144,9 @@ export function Topbar({
               </span>`}
           </span>
         </div>
+        ${cur && refreshAsk && html`<${RefreshAsk} onSubmit=${onRefreshSubmit} onCancel=${onRefreshCancel} />`}
+        ${cur && html`<${RefreshBar} req=${refreshReq} viewedNo=${viewedNo}
+          onReload=${onRefreshReload} onRetry=${onRefreshRetry} onDismiss=${onRefreshDismiss} />`}
         ${stale && html`
           <p class="notice stale-banner">
             ${S.stale.banner}

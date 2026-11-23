@@ -228,6 +228,9 @@ function App() {
   const [outboxN, setOutboxN] = useState(0);          // 判 outbox 待发条数（>0 时 UI 显示「待发 N 条」）
   const [resumeBar, setResumeBar] = useState(null);   // 续读提示：{docPath, anchor} | null。点了才跳，绝不自动
   const readStateId = useRef(null);                   // 本折续读 comment 的 id（记住 → 下次直接 PATCH）
+  // 「更新」（门下 D-19，docs/REFRESH-BUTTON.md）：本折最新一条 refresh 请求 + live（本次会话亲眼看着变的）
+  const [refreshReq, setRefreshReq] = useState(null);  // { rid, request_id, status, result_revision_no, error, note, live } | null
+  const [refreshAsk, setRefreshAsk] = useState(false); // 「要更新什么」小框开着没
 
   const docRef = useRef(null);
   const autoRan = useRef(false); // 冒烟只跑一次（切折会让 docTick 回到 1）
@@ -359,6 +362,10 @@ function App() {
         const list = await loadPRs();
         const mine = c ? ev.items.filter((e) => e.review_id === c.pr.number) : [];
         if (!mine.length) { say(S.backend.eventsRefreshed(ev.items.length)); return; }
+        // 「更新」状态条跟着事件走（refresh.requested / refresh.updated），不另开轮询
+        if (can('latestRefresh') && mine.some((e) => String(e.type).startsWith('refresh.'))) {
+          api.latestRefresh(c.pr.number).then((r) => adoptRefresh(c.pr.number, r, true)).catch(() => {});
+        }
         const fresh = (list || []).find((p) => p.number === c.pr.number);
         if (fresh && fresh.head?.sha !== c.pr.head?.sha) {
           openPR(fresh);
@@ -505,6 +512,9 @@ function App() {
     // 拍板条数在药丸上常显，「有事要你决定」仍在余光里；桌面照旧按拍板点默认摊开。
     setBodyOpen(hasDecisions(pr.body) && !isPhone());
     setCur({ pr, files: null, docs: null });
+    setRefreshAsk(false);
+    // 同一折重开（事件刷新切到新版）保留 live，换折清空；详情回来再按 svc.refresh 补
+    setRefreshReq((r) => (r && r.rid === pr.number ? r : null));
     setDrafts(A.loadDrafts(pr.number));
     // 立刻清岛屿并示 loading：否则 listPRFiles 整个往返期间旧折正文挂着，
     // 这时划选会产出 path:null 的脏草稿（评审 N2）
@@ -527,6 +537,7 @@ function App() {
             if (R.current.cur?.pr.number !== pr.number) return;
             pr = full;
             setBodyOpen(hasDecisions(pr.body) && !isPhone());
+            if (pr.svc?.refresh !== undefined) adoptRefresh(pr.number, pr.svc.refresh, false);
           } catch { /* 补不到就用清单项 */ }
         }
         if (can('markRead')) api.markRead(pr.number).catch(() => {});
@@ -1422,6 +1433,34 @@ function App() {
     }
   }
 
+  // ── 更新（门下 D-19）：派任务把放久了的折子重核一遍出新版。docs/REFRESH-BUTTON.md ──
+  // live：本次会话亲眼看着变的（提交 / 事件推来）。同一条请求一旦 live 就一直 live（重开折不丢）。
+  function adoptRefresh(rid, r, live) {
+    setRefreshReq((prev) => {
+      if (R.current.cur?.pr.number !== rid) return prev;
+      if (!r) return null;
+      const keep = prev && prev.rid === rid && prev.request_id === r.request_id && prev.live;
+      return { ...r, rid, live: Boolean(live || keep) };
+    });
+  }
+  async function sendRefresh(note) {
+    const c = R.current.cur;
+    if (!c || !can('requestRefresh')) return;
+    setRefreshAsk(false); setMoreOpen(false);
+    try {
+      adoptRefresh(c.pr.number, await api.requestRefresh(c.pr.number, note), true);
+    } catch (err) {
+      say(S.refreshReq.sendFailed(err.message));
+    }
+  }
+  async function reloadForRefresh() {
+    const c = R.current.cur;
+    if (!c) return;
+    const list = await loadPRs();
+    const fresh = (list || []).find((p) => p.number === c.pr.number);
+    openPR(fresh || c.pr);
+  }
+
   // ── 关（reject，门下）：结案不合。带题先答题（判框 reject 态），否则确认框直接发。
   function rejectFolder() {
     const c = R.current.cur;
@@ -1925,7 +1964,17 @@ function App() {
           onRefresh=${() => { setCur(null); setDocPath(null); loadPRs(); }}
           onCopyRef=${copyRef} onCarry=${carryOut} onZongpi=${() => { setVerdictMode(null); setZongpi((z) => !z); }}
           onReject=${can('rejectPR') ? rejectFolder : null} onShelve=${can('markShelved') ? shelveFolder : null}
-          onSubmit=${submitAll} onQinci=${qinci} />
+          onSubmit=${submitAll} onQinci=${qinci}
+          onRefreshReq=${can('requestRefresh') && cur && cur.pr.svc?.status !== 'withdrawn'
+            && !(cur.pr.svc?.is_decider === false && cur.pr.svc?.is_owner === false)
+            ? () => { setMoreOpen(false); setRefreshAsk(true); } : null}
+          refreshReq=${refreshReq && refreshReq.rid === cur?.pr.number ? refreshReq : null}
+          refreshAsk=${refreshAsk}
+          viewedNo=${Number((/@(\d+)$/.exec(viewed || headSha || '') || [])[1]) || null}
+          onRefreshSubmit=${sendRefresh} onRefreshCancel=${() => setRefreshAsk(false)}
+          onRefreshReload=${reloadForRefresh}
+          onRefreshRetry=${() => sendRefresh(refreshReq?.note || '')}
+          onRefreshDismiss=${() => setRefreshReq(null)} />
         ${dash && html`
           <${Dashboard} prs=${prs} donePrs=${donePrs} cur=${cur} timeAgo=${timeAgo}
             onOpen=${(pr) => { setDash(false); openPR(pr); }}

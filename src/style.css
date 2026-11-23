@@ -346,6 +346,18 @@ main { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: colum
 /* 关闭钮只在手机档的浮条上露（见 ≤900 块）；桌面提示条仍随顶栏，布局不变。 */
 .notice-close { display: none; }
 
+/* 「更新」（门下 D-19）：小框 + 题签下的状态条。沿用 .notice 的纸色条，只在有请求时出现。 */
+.refresh-ask, .refresh-bar {
+  flex: none; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 10px var(--work-pad) 0; padding: 8px 14px; font-size: var(--t-s);
+  background: var(--paper-raised); border: 1px solid var(--rule); border-left: 2px solid var(--ink-soft); color: var(--ink);
+}
+.refresh-ask-title { font-weight: normal; letter-spacing: .1em; }
+.refresh-note { flex: 1 1 260px; min-width: 0; font: inherit; padding: 4px 8px; resize: vertical; }
+.refresh-ask-btns { display: flex; gap: 8px; }
+.refresh-bar.refresh-failed { border-left-color: var(--cinnabar); }
+.refresh-act { padding: 2px 10px; font-size: var(--t-xs); }
+
 .work { flex: 1; min-height: 0; overflow-y: auto; padding: 30px var(--work-pad) 60px; }
 /* 版心居中（2026-08-03 反馈：大屏上「很可笑」）——版心宽度是写死的，宽屏下整块一直贴左，
    2560 的屏上右边空掉 1200+px。这里只补对称留白，一栏的宽度都不改：拉宽正文反而回行困难。

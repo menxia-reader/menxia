@@ -6,7 +6,7 @@
 // 不碰真用户 localStorage 里的 menxia.svc.auth。
 import {
   SERVICE_URL, API_BASE, setAuthStorage, memoryAuthStorage, s256,
-  buildAuthorizeUrl, exchangeCode, getToken, verifyToken, logout,
+  buildAuthorizeUrl, exchangeCode, getToken, verifyToken, logout, requestRefresh,
 } from './service-api.js';
 
 const RID = 'rv_01DEMO000000000000000000S1';
@@ -20,6 +20,7 @@ export const state = {
   // 续读位置预埋「别的设备读到 L30」：开折该出「跳到上次位置?」条（不自动跳）
   readState: { state: 'unread', position: { document_path: 'docs/demo.md', anchor: 'L30', device: 'ipad', time: now() }, updated_at: now(), has_new_activity: true },
   batches: [], contentHits: [],
+  refreshes: [],   // D-19「更新」请求，新的在前（同服务端 GET 的 created_at 倒序）
 };
 
 function seed({ DOC, DOC_OLD }) {
@@ -56,6 +57,7 @@ const listItem = () => ({
 const full = () => ({
   ...listItem(), current_revision: revisionOut(cur()), revisions: state.revisions.map(revisionOut),
   counts: { comments: state.comments.length, decisions: state.decisions.length },
+  refresh: state.refreshes[0] || null,
 });
 const event = (type, ref_id, data = {}) => state.events.push({
   review_id: RID, review_title: state.review.title, review_status: state.review.status, type, ref_id, data, created_at: now(),
@@ -73,6 +75,28 @@ function agentPushesRevision() {
   state.review.updated_at = now();
   event('revision.created', `rev_${n}`, { revision_no: n });
   event('status.changed', null, { status: 'open' });
+}
+
+// 画可执行器消费「更新」请求（真实世界：PATCH …/refresh-requests/{id}，queued→running→done|failed 只进不退）。
+// done = 先推一版新 revision 再回填 result_revision_no；原 approved/rejected 的回到 open（同 services 侧 D-19）。
+export function advanceRefresh(status, { error } = {}) {
+  const r = state.refreshes[0];
+  if (!r || r.status === 'done' || r.status === 'failed') return null;
+  if (status === 'done') {
+    const n = cur().revision_no + 1;
+    state.revisions.push({ id: `rev_${n}`, revision_no: n, text: cur().text, change_note: `更新 v${n}`, created_at: now() });
+    event('revision.created', `rev_${n}`, { revision_no: n });
+    if (state.review.status === 'approved' || state.review.status === 'rejected') {
+      state.review.status = 'open'; state.review.closed_at = null;
+      event('status.changed', null, { status: 'open' });
+    }
+    r.result_revision_no = n;
+  }
+  if (status === 'failed') r.error = error || 'agent 失败';
+  r.status = status; r.updated_at = now();
+  state.review.updated_at = now();
+  event('refresh.updated', r.request_id, { request_id: r.request_id, status });
+  return r;
 }
 
 async function handle(url, init) {
@@ -192,6 +216,19 @@ async function handle(url, init) {
     event('status.changed', null, { status: next });
     if (next === 'changes_requested') setTimeout(agentPushesRevision, 300);
     return J(d, 201);
+  }
+  if (sub === '/refresh-requests' && method === 'GET') return J({ items: state.refreshes });
+  if (sub === '/refresh-requests' && method === 'POST') {
+    if (state.review.status === 'withdrawn') return ERR(409, 'review_closed');
+    if (state.review.is_decider === false && state.review.is_owner === false) return ERR(403, 'forbidden');
+    const b = body();
+    if (b.note != null && (typeof b.note !== 'string' || b.note.length > 1000)) return ERR(400, 'invalid_argument', 'note');
+    const open = state.refreshes.find((r) => r.status === 'queued' || r.status === 'running');
+    if (open) return J(open, 200);   // 幂等：已有进行中的就回那一条
+    const r = { request_id: `rfr_01DEMO${String(state.refreshes.length + 1).padStart(20, '0')}`, status: 'queued', note: b.note || null, created_at: now(), updated_at: now() };
+    state.refreshes.unshift(r);
+    event('refresh.requested', r.request_id, { request_id: r.request_id });
+    return J(r, 201);
   }
   if (sub === '/read-state' && method === 'GET') return J(state.readState);
   if (sub === '/read-state' && method === 'PUT') {
@@ -398,11 +435,41 @@ export async function runSvcSmoke(docEl) {
   chk('svc-status-approved', state.review.status === 'approved', state.review.status);
   chk('svc-archived-readonly', Boolean(await waitFor(() => !document.querySelector('.btn-qinci'))));
 
+  // ⑥a 「更新」（D-19）：已画可的折放久了 → ⋯「更新」→ 小框填一句 → 排队中 → 执行器推进 → 已更新到第 N 版（折回到待读）
+  const rbtn = await waitFor(() => document.querySelector('.refresh-req-btn'));
+  chk('svc-refresh-btn-shown', Boolean(rbtn) && rbtn.textContent.trim() === '更新');
+  rbtn?.click();
+  const ask = await waitFor(() => document.querySelector('.refresh-ask'));
+  const rta = ask?.querySelector('textarea');
+  chk('svc-refresh-ask-open', Boolean(rta) && /价格再核一遍/.test(rta.placeholder));
+  if (rta) rta.value = '价格再核一遍';
+  ask?.querySelector('.refresh-ok')?.click();
+  const rq = await waitFor(() => state.refreshes[0]);
+  chk('svc-refresh-posted', rq?.status === 'queued' && rq?.note === '价格再核一遍' && !document.querySelector('.refresh-ask'), JSON.stringify(rq));
+  chk('svc-refresh-bar-queued', Boolean(await waitFor(() => /排队中/.test(document.querySelector('.refresh-bar.refresh-queued')?.textContent || ''))),
+    document.querySelector('.refresh-bar')?.textContent);
+  chk('svc-refresh-btn-disabled-pending', Boolean(document.querySelector('.refresh-req-btn[disabled]')));
+  // 重复点：服务端幂等回同一条（200），不新开第二条
+  let again = null;
+  try { again = await requestRefresh(RID, '再点一次'); } catch (e) { again = { err: e.message }; }
+  chk('svc-refresh-repeat-same', again?.request_id === rq?.request_id && state.refreshes.length === 1, JSON.stringify(again));
+  advanceRefresh('running');
+  await window.__svcPoll?.();
+  chk('svc-refresh-bar-running', Boolean(await waitFor(() => document.querySelector('.refresh-bar.refresh-running'))), document.querySelector('.refresh-bar')?.textContent);
+  advanceRefresh('done');
+  await window.__svcPoll?.();
+  const doneBar = await waitFor(() => document.querySelector('.refresh-bar.refresh-done'));
+  chk('svc-refresh-bar-done', /已更新到第 4 版/.test(doneBar?.textContent || ''), doneBar?.textContent || document.querySelector('.refresh-bar')?.textContent);
+  chk('svc-refresh-reopened-open', state.review.status === 'open' && Boolean(await waitFor(() => state.contentHits.includes(4))) && Boolean(await waitFor(() => document.querySelector('.btn-qinci'))),
+    `status=${state.review.status} hits=${state.contentHits}`);
+
   // ⑥b 已关栏：被关（rejected）的折不在待审也不在已画可；侧栏「已关」点开才取 status=rejected,withdrawn
   state.review.status = 'rejected';
   state.review.closed_at = now();
   const closedTab = document.querySelector('.list-tab[data-tab="closed"]');
   closedTab?.click();
+  // 先等「已关」取回来（⑥a 更新后这折回到了待审，旧清单里的同名卡会被误抓）
+  await waitFor(() => closedTab?.textContent.trim() === '已关 1');
   const closedCard = await waitFor(() => [...document.querySelectorAll('#pr-list .pr-item')].find((el) => el.textContent.includes('门下服务 demo 折')));
   chk('svc-closed-tab-lists-rejected', Boolean(closedCard) && closedTab?.textContent.trim() === '已关 1', closedTab?.textContent);
   closedCard?.click();
