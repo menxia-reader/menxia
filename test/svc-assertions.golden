@@ -35,6 +35,15 @@ svc-logout-revokes-grant
 svc-no-ci-badge
 svc-open-marks-read
 svc-readstate-position-put
+svc-refresh-ask-open
+svc-refresh-bar-done
+svc-refresh-bar-queued
+svc-refresh-bar-running
+svc-refresh-btn-disabled-pending
+svc-refresh-btn-shown
+svc-refresh-posted
+svc-refresh-reopened-open
+svc-refresh-repeat-same
 svc-resume-bar-shown
 svc-resume-jump-scrolls
 svc-shelve-put

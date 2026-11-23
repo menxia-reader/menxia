@@ -646,3 +646,41 @@ test('侧栏：搜索词同时过滤书架的两组', () => {
   assert.doesNotMatch(shelf, /"t3"/, '不匹配的读毕折被过滤掉');
   assert.match(shelf, /读毕书架 3/, 'tab 计数不受搜索词影响');
 });
+
+// ── 「更新」（门下 D-19）：状态条 + 按钮 ──
+{
+  const { RefreshBar, refreshBarState } = await import('../src/components/topbar.js');
+  const textOf = (v) => {
+    if (v == null || typeof v === 'boolean') return '';
+    if (typeof v !== 'object') return String(v);
+    if (Array.isArray(v)) return v.map(textOf).join('');
+    return textOf(v.props?.children);
+  };
+  const cls = (c) => (v) => typeof v?.props?.class === 'string' && v.props.class.split(' ').includes(c);
+
+  test('更新状态条：排队中 / 更新中 / 没更新成（原因 + 重试）', () => {
+    assert.equal(RefreshBar({ req: null }), null);
+    assert.match(textOf(RefreshBar({ req: { status: 'queued' } })), /排队中/);
+    assert.match(textOf(RefreshBar({ req: { status: 'running' } })), /更新中/);
+    const failed = RefreshBar({ req: { status: 'failed', error: '源站打不开' }, onRetry: () => {} });
+    assert.match(textOf(failed), /没更新成：源站打不开/);
+    assert.ok(find(failed, cls('refresh-retry')), '失败要能重试');
+  });
+  test('更新状态条 done：读旧版 → 「已更新到第 N 版」+ 刷新看新版；已在新版且本次亲见 → 知道了；旧消息不常驻', () => {
+    const behind = RefreshBar({ req: { status: 'done', result_revision_no: 4, live: false }, viewedNo: 3, onReload: () => {}, onDismiss: () => {} });
+    assert.match(textOf(behind), /已更新到第 4 版/);
+    assert.ok(find(behind, cls('refresh-reload')));
+    const live = RefreshBar({ req: { status: 'done', result_revision_no: 4, live: true }, viewedNo: 4, onReload: () => {}, onDismiss: () => {} });
+    assert.equal(find(live, cls('refresh-reload')), null);
+    assert.ok(find(live, cls('refresh-dismiss')));
+    assert.equal(refreshBarState({ status: 'done', result_revision_no: 4, live: false }, 4), null, '几周前的 done 不该每次开折都挂着');
+  });
+  test('更新按钮：只在给了 onRefreshReq 时出现（GitHub 源 / withdrawn 不给）；排队/更新中禁用', () => {
+    const base = { cur: { pr: { number: 1, title: 'x' } }, onMore: () => {}, onRefresh: () => {}, onCopyRef: () => {}, onZongpi: () => {}, onSubmit: () => {}, onQinci: () => {} };
+    assert.equal(find(Topbar(base), cls('refresh-req-btn')), null);
+    const on = find(Topbar({ ...base, onRefreshReq: () => {} }), cls('refresh-req-btn'));
+    assert.ok(on); assert.equal(on.props.disabled, false); assert.equal(textOf(on), '更新');
+    const busy = find(Topbar({ ...base, onRefreshReq: () => {}, refreshReq: { status: 'running' } }), cls('refresh-req-btn'));
+    assert.equal(busy.props.disabled, true); assert.equal(textOf(busy), '更新中…');
+  });
+}

@@ -357,3 +357,52 @@ test('P2-1 离线补发（staleAsComment）遇 409 stale_revision → 退成整�
   });
   assert.deepEqual(await svc.createIssueComment(REVIEW.id, '改', { ref: `${REVIEW.id}@1`, staleAsComment: true }), { id: 'c7', kind: 'comment' });
 });
+
+// ── D-19「更新」──
+const RFR = { request_id: 'rfr_01ARZ3NDEKTSV4RRFFQ69G5FAV', status: 'queued', note: '价格再核一遍', created_at: 't', updated_at: 't' };
+test('requestRefresh：POST …/refresh-requests 带 bearer 与 {note}（去首尾空白）；201/200 都原样返回那条', async () => {
+  stubFetch((url, opts) => {
+    assert.ok(url.endsWith(`/api/v1/reviews/${REVIEW.id}/refresh-requests`), url);
+    assert.equal(opts.method, 'POST');
+    assert.equal(opts.headers.Authorization, 'Bearer A1');
+    assert.deepEqual(JSON.parse(opts.body), { note: '价格再核一遍' });
+    return res(calls.length === 1 ? 201 : 200, RFR);
+  });
+  assert.deepEqual(await svc.requestRefresh(REVIEW.id, '  价格再核一遍 '), RFR);
+  assert.deepEqual(await svc.requestRefresh(REVIEW.id, '价格再核一遍'), RFR, '已有进行中 → 200 同一条');
+});
+test('requestRefresh：不填 note 发空对象（不发 note:""）；超长截到 1000', async () => {
+  const bodies = [];
+  stubFetch((url, opts) => { bodies.push(JSON.parse(opts.body)); return res(201, RFR); });
+  await svc.requestRefresh(REVIEW.id);
+  await svc.requestRefresh(REVIEW.id, 'x'.repeat(1200));
+  assert.deepEqual(bodies[0], {});
+  assert.equal(bodies[1].note.length, 1000);
+});
+test('requestRefresh：409 review_closed / 403 → 中文短句，保留 status/code', async () => {
+  stubFetch(() => res(409, { error: { code: 'review_closed', message: 'withdrawn' } }));
+  await assert.rejects(svc.requestRefresh(REVIEW.id), (e) => e.status === 409 && e.code === 'review_closed' && /已撤回/.test(e.message));
+  stubFetch(() => res(403, { error: { code: 'forbidden' } }));
+  await assert.rejects(svc.requestRefresh(REVIEW.id), (e) => e.status === 403 && /拍板人/.test(e.message));
+});
+test('latestRefresh：GET …/refresh-requests 取 items[0]（倒序最新）；空列表 → null', async () => {
+  stubFetch((url, opts) => {
+    assert.ok(url.endsWith(`/reviews/${REVIEW.id}/refresh-requests`));
+    assert.equal(opts.method, undefined);
+    return res(200, { items: calls.length === 1 ? [{ ...RFR, status: 'done', result_revision_no: 3 }, RFR] : [] });
+  });
+  assert.equal((await svc.latestRefresh(REVIEW.id)).result_revision_no, 3);
+  assert.equal(await svc.latestRefresh(REVIEW.id), null);
+});
+test('toPR：详情的 refresh 进 svc.refresh（null 保留为 null）；清单项没有该字段 → undefined', () => {
+  assert.equal(svc.toPR(REVIEW).svc.refresh, undefined);
+  assert.equal(svc.toPR({ ...REVIEW, refresh: null }).svc.refresh, null);
+  assert.equal(svc.toPR({ ...REVIEW, refresh: RFR }).svc.refresh.request_id, RFR.request_id);
+});
+test('store 转发 requestRefresh / latestRefresh；GitHub driver 没有 → has() 为 false（GitHub 模式藏按钮）', () => {
+  assert.equal(typeof store.requestRefresh, 'function');
+  assert.equal(store.has('requestRefresh'), false);
+  store.setAdapter(svc);
+  try { assert.equal(store.has('requestRefresh'), true); assert.equal(store.has('latestRefresh'), true); }
+  finally { store.setAdapter(gh); }
+});
