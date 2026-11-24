@@ -528,7 +528,8 @@ export async function runSvcSmoke(docEl) {
     `before=${nLines} after=${mod?.querySelectorAll('.diff-line').length}`);
   chk('svc-diff-readonly', !document.querySelector('.diff-view textarea, .diff-view .zhupi-float'));
   document.querySelector('.diff-close')?.click();
-  chk('svc-diff-close', Boolean(await waitFor(() => !document.querySelector('.diff-view'))) && qd() === null && !document.querySelector('.work.work-hidden'),
+  // 三个条件一起等：?diff 由 ui.js 的 useEffect 在 DOM 提交**之后**才删，只等 .diff-view 消失再读 URL 会偶发读到旧值
+  chk('svc-diff-close', Boolean(await waitFor(() => !document.querySelector('.diff-view') && qd() === null && !document.querySelector('.work.work-hidden'))),
     `diff=${qd()}`);
 
   // ⑥ 画可 = approve 带 revision_no=3（所批即所合）；这折带题，画可先走判框答题
