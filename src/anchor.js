@@ -174,6 +174,16 @@ export const pendingCountFor = (num) => loadDrafts(num).length;
 
 export const fmtDraft = (d) => `> ${d.quote}\n\n${d.note}`;
 
+// 呈出被拒是不是「第 index 条引文在服务端正文里找不到」（门下 createCommentsBatch：400 invalid_argument，
+// details {field:'comments.<i>.anchor.quote', index:i}，新版服务端再附 quote / document_path，缺了照认）。
+// 认出来 ui 就标出那条草稿、给「改成整折评论再呈 / 取消」，而不是整批失败了事（docs/ANCHOR-FAIL-UX.md）。
+export function anchorFailure(err) {
+  const d = err?.details;
+  if (err?.status !== 400 || err.code !== 'invalid_argument' || !d) return null;
+  if (typeof d.field !== 'string' || !d.field.endsWith('.anchor.quote') || !Number.isInteger(d.index)) return null;
+  return { index: d.index, quote: typeof d.quote === 'string' ? d.quote : '', documentPath: typeof d.document_path === 'string' ? d.document_path : '' };
+}
+
 // ── 已呈批注串（M3）──
 // 根批注体恒为 `> 引文\n\n正文`（fmtDraft 写出的形状）；回话是纯文本无引文前缀。
 // 解析成 { quote, body }：只认「开头连续的 > 行」为引文，其余为正文，认不出则 quote 空。
