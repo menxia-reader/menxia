@@ -326,6 +326,8 @@ export function toPR(r) {
       is_owner: r.is_owner,
       // D-19「更新」：最新一条请求或 null（只在详情里有；清单项缺这个字段 → undefined，表示「不知道」）
       refresh: r.refresh === undefined ? undefined : (r.refresh || null),
+      // 当前版本创建时间（「可能过时」用，src/stale.js）。老服务端没这字段 → null，调用方退回 updated_at
+      current_revision_at: r.current_revision_at || null,
     },
   };
 }
@@ -380,6 +382,16 @@ export function commitsOf(detail) {
   }));
 }
 export const listPRCommits = (id) => getDetail(id).then(commitsOf);
+
+/** 版本对比用（docs/DIFF-STALE-TOAST.md）：详情 revisions → [{no, created_at, change_note, documents:[{path, sha256}]}]，按版本号升序。
+ *  只要文档（documents），不要附件——对比页只比 markdown 正文。 */
+export function revisionsOf(detail) {
+  return [...(detail.revisions || [])].sort((a, b) => a.revision_no - b.revision_no).map((rv) => ({
+    no: rv.revision_no, created_at: rv.created_at || null, change_note: rv.change_note || null,
+    documents: (rv.documents || []).map((d) => ({ path: d.path, sha256: d.sha256 || null })),
+  }));
+}
+export const listRevisions = (id) => getDetail(id).then(revisionsOf);
 
 const encodePath = (p) => p.split('/').map(encodeURIComponent).join('/');
 const contentPath = (path, ref) => {

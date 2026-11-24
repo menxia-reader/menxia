@@ -23,10 +23,16 @@ export const state = {
   refreshes: [],   // D-19「更新」请求，新的在前（同服务端 GET 的 created_at 倒序）
 };
 
+// 版本对比 / 可能过时示例（docs/DIFF-STALE-TOAST.md）：
+//  · v1 比 v2 少一大节（行级新增 + 折叠）、末行措辞不同（字符级高亮），另有一篇 v2 删掉的附录（文档级「删除」）；
+//  · 两版都放在一个多月前 → 当前版本「N 周未更新」；之后 agent 推的新版是「现在」，标签随之消失；
+//  · sha256 按正文算：agent 原样推的新版与上一版同 sha → 对比页标「未改」、不拉正文。
+const OLD_APPENDIX = '# 附录\n\n这一篇在第二版里删掉了。\n';
 function seed({ DOC, DOC_OLD }) {
+  const v1 = DOC_OLD.replace('末行锚点：见此行即已滚到底。', '末行锚点：看到这行就已滚到底。');
   state.revisions = [
-    { id: 'rev_1', revision_no: 1, text: DOC_OLD, change_note: '初稿', created_at: ago(2) },
-    { id: 'rev_2', revision_no: 2, text: DOC, change_note: '补加长段', created_at: ago(1) },
+    { id: 'rev_1', revision_no: 1, text: v1, extra: { 'docs/附录.md': OLD_APPENDIX }, change_note: '初稿', created_at: ago(24 * 40) },
+    { id: 'rev_2', revision_no: 2, text: DOC, change_note: '补加长段', created_at: ago(24 * 30) },
   ];
   state.review = {
     id: RID, title: '门下服务 demo 折', summary: '走门下服务的演示折：涂归、判、画可全写回内存版服务。',
@@ -45,14 +51,19 @@ function seed({ DOC, DOC_OLD }) {
 }
 
 const cur = () => state.revisions[state.revisions.length - 1];
+// 假 sha256：正文的 FNV-1a 散列（够区分「改没改」，不是真 sha）
+const fakeSha = (s) => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return `fnv${(h >>> 0).toString(16)}`; };
+const docsOf = (r) => ({ 'docs/demo.md': r.text, ...(r.extra || {}) });
 const revisionOut = (r) => ({
   id: r.id, revision_no: r.revision_no, change_note: r.change_note, created_by_kind: 'agent', created_at: r.created_at,
   content_hash: `h${r.revision_no}`,
-  documents: [{ path: 'docs/demo.md', lang: 'zh-CN', title: '涂归 demo 折', bytes: r.text.length, sha256: `s${r.revision_no}` }],
+  documents: Object.entries(docsOf(r)).map(([path, text]) => ({
+    path, lang: 'zh-CN', title: path === 'docs/demo.md' ? '涂归 demo 折' : null, bytes: text.length, sha256: fakeSha(text),
+  })),
   attachments: [],
 });
 const listItem = () => ({
-  ...state.review, current_revision_no: cur().revision_no, read_state: state.readState,
+  ...state.review, current_revision_no: cur().revision_no, current_revision_at: cur().created_at, read_state: state.readState,
 });
 const full = () => ({
   ...listItem(), current_revision: revisionOut(cur()), revisions: state.revisions.map(revisionOut),
@@ -155,9 +166,10 @@ async function handle(url, init) {
   const content = /^\/revisions\/(\d+)\/content\/(.+)$/.exec(sub);
   if (content && method === 'GET') {
     const r = state.revisions.find((x) => x.revision_no === Number(content[1]));
-    if (!r || decodeURIComponent(content[2]) !== 'docs/demo.md') return ERR(404, 'not_found');
+    const text = r && docsOf(r)[decodeURIComponent(content[2])];
+    if (text == null) return ERR(404, 'not_found');
     state.contentHits.push(r.revision_no);
-    return new Response(r.text, { status: 200, headers: { 'content-type': 'text/markdown; charset=utf-8' } });
+    return new Response(text, { status: 200, headers: { 'content-type': 'text/markdown; charset=utf-8' } });
   }
   if (sub === '/comments' && method === 'GET') return J({ items: state.comments, next_cursor: null });
   const mkComment = (c, revNo) => {
@@ -320,6 +332,20 @@ export async function runSvcSmoke(docEl) {
   chk('svc-open-marks-read', state.readState.state === 'read', `state=${state.readState.state}`);
   chk('svc-no-ci-badge', !document.querySelector('.check-badge, .check-fail, .check-pass'));
 
+  // ②a 可能过时（docs/DIFF-STALE-TOAST.md）：当前版本放了 30 天 → 清单行与题签旁灰色「4 周未更新」；点标签 = 打开「更新」小框
+  const cardTag = await waitFor(() => document.querySelector('#pr-list .pr-item .stale-tag'));
+  chk('svc-stale-tag-list', cardTag?.textContent.trim() === '4 周未更新', cardTag?.textContent);
+  const crumbTag = document.querySelector('.crumb .stale-tag');
+  chk('svc-stale-tag-crumb', crumbTag?.textContent.trim() === '4 周未更新', crumbTag?.textContent);
+  const crumbEl = document.querySelector('.crumb');
+  chk('svc-stale-tag-grey', Boolean(crumbTag) && getComputedStyle(crumbTag).color === getComputedStyle(crumbEl).color,
+    crumbTag && `${getComputedStyle(crumbTag).color} vs ${getComputedStyle(crumbEl).color}`);
+  cardTag?.click();
+  const staleAsk = await waitFor(() => document.querySelector('.refresh-ask'));
+  chk('svc-stale-tag-opens-refresh', Boolean(staleAsk) && state.refreshes.length === 0);
+  staleAsk?.querySelector('.refresh-cancel')?.click();
+  await waitFor(() => !document.querySelector('.refresh-ask'));
+
   // ②b 续读位置：远端（别的设备）读到 L30 → 出提示条不自动跳；点了才跳；滚动后把新位置 PUT 回去
   const jumpGo = await waitFor(() => document.querySelector('.offline-jump .offline-jump-go'));
   chk('svc-resume-bar-shown', Boolean(jumpGo));
@@ -329,6 +355,24 @@ export async function runSvcSmoke(docEl) {
   chk('svc-resume-jump-scrolls', Boolean(await waitFor(() => (work?.scrollTop ?? 0) > y0 + 50)), `y0=${y0} y=${work?.scrollTop}`);
   const pos = await waitFor(() => (state.readState.position?.device !== 'ipad' ? state.readState.position : null), 4000);
   chk('svc-readstate-position-put', Boolean(pos) && pos.document_path === 'docs/demo.md' && /^L\d+$/.test(pos.anchor || ''), JSON.stringify(pos));
+
+  // ②d 临时提示浮层：提示出现 / 消失前后，视口里第一行正文的位置不变（不占文档流）
+  const firstTop = () => {
+    const vis = [...docEl.querySelectorAll('[data-line]')].find((b) => b.getBoundingClientRect().bottom > 0);
+    return vis ? Math.round(vis.getBoundingClientRect().top * 10) / 10 : null;
+  };
+  for (let prev = null, i = 0; i < 40; i++) { const t = firstTop(); if (t === prev) break; prev = t; await sleep(50); }  // 等跳转的平滑滚动停下
+  const top0 = firstTop();
+  window.__say?.('门下有 3 条新动态，清单已刷新。');
+  const toast = await waitFor(() => document.querySelector('.notice-layer > .notice'));
+  await sleep(60);
+  const top1 = firstTop();
+  chk('svc-toast-overlay', Boolean(toast) && getComputedStyle(toast).position === 'absolute', toast && getComputedStyle(toast).position);
+  chk('svc-toast-no-shift', top0 != null && top0 === top1, `before=${top0} after=${top1}`);
+  window.__say?.('');
+  await waitFor(() => !document.querySelector('.notice-layer > .notice'));
+  await sleep(60);
+  chk('svc-toast-gone-no-shift', firstTop() === top0, `before=${top0} after=${firstTop()}`);
 
   // ②c 留：⋯ 菜单「留」→ read-state shelved
   document.querySelector('.shelve-btn')?.click();
@@ -419,6 +463,46 @@ export async function runSvcSmoke(docEl) {
   // 游标每标签一份（sessionStorage，bughunt P2-3）
   chk('svc-events-cursor-advanced', sessionStorage.getItem('menxia.svc.events') === String(state.events.length), `cur=${sessionStorage.getItem('menxia.svc.events')} n=${state.events.length}`);
   chk('svc-events-notice', Boolean(await waitFor(() => /v3/.test(document.querySelector('.notice')?.textContent || ''))), document.querySelector('.notice')?.textContent);
+
+  // ⑤a 版本对比（docs/DIFF-STALE-TOAST.md）。v3 是 agent 刚推的（「现在」）→ 过时标签消失
+  chk('svc-stale-tag-gone-after-new-rev', Boolean(await waitFor(() => !document.querySelector('.crumb .stale-tag'))));
+  document.querySelector('.more-btn')?.click();
+  const diffBtn = await waitFor(() => document.querySelector('.diff-btn'));
+  chk('svc-diff-entry-in-menu', diffBtn?.textContent.trim() === '对比版本', diffBtn?.textContent);
+  const hits0 = state.contentHits.length;
+  diffBtn?.click();
+  const qd = () => new URL(location.href).searchParams.get('diff');
+  await waitFor(() => document.querySelector('.diff-view .diff-doc'));
+  chk('svc-diff-default-prev-to-cur', qd() === '2..3' && document.querySelector('.diff-a')?.value === '2' && document.querySelector('.diff-b')?.value === '3',
+    `diff=${qd()} a=${document.querySelector('.diff-a')?.value} b=${document.querySelector('.diff-b')?.value}`);
+  // v3 是原样推的：sha 相同 → 直接标「未改」，不拉正文
+  chk('svc-diff-same-sha-skips-fetch', document.querySelector('.diff-doc-same .diff-kind')?.textContent === '未改' && state.contentHits.length === hits0,
+    `hits+=${state.contentHits.slice(hits0)}`);
+  chk('svc-diff-hides-reader', Boolean(document.querySelector('.work.work-hidden')));
+  // 切到 v1 → v3：附录删了、正文改了（行级 + 字符级 + 折叠）；URL 跟着变
+  const selA = document.querySelector('.diff-a');
+  if (selA) { selA.value = '1'; selA.dispatchEvent(new Event('change', { bubbles: true })); }
+  const mod = await waitFor(() => document.querySelector('.diff-doc-modified .diff-rows'));
+  chk('svc-diff-switch-url', qd() === '1..3', `diff=${qd()}`);
+  chk('svc-diff-doc-kinds', Boolean(mod) && document.querySelector('.diff-doc-removed .diff-path')?.textContent === 'docs/附录.md'
+    && document.querySelector('.diff-doc-removed .diff-kind')?.textContent === '删除');
+  chk('svc-diff-lines-added', (mod?.querySelectorAll('.diff-line.diff-add').length || 0) > 5, `add=${mod?.querySelectorAll('.diff-line.diff-add').length}`);
+  const hiOf = (sel) => [...(mod?.querySelectorAll(sel) || [])].map((m) => m.textContent).join('|');
+  chk('svc-diff-char-level', /看到这/.test(hiOf('.diff-del .diff-ch')) && /见此/.test(hiOf('.diff-add .diff-ch')) && !/滚到底/.test(hiOf('.diff-ch')),
+    `del=${hiOf('.diff-del .diff-ch')} add=${hiOf('.diff-add .diff-ch')}`);
+  const delRow = mod?.querySelector('.diff-line.diff-del'), addRow = mod?.querySelector('.diff-line.diff-add'), eqRow = mod?.querySelector('.diff-line.diff-eq');
+  chk('svc-diff-colors', Boolean(delRow && addRow && eqRow) && /220, 60, 60/.test(getComputedStyle(delRow).backgroundColor)
+    && /46, 160, 67/.test(getComputedStyle(addRow).backgroundColor) && getComputedStyle(delRow).color === getComputedStyle(eqRow).color,
+    delRow && `${getComputedStyle(delRow).backgroundColor} / ${addRow && getComputedStyle(addRow).backgroundColor}`);
+  const fold = mod?.querySelector('.diff-fold');
+  const nLines = mod?.querySelectorAll('.diff-line').length || 0;
+  fold?.click();
+  chk('svc-diff-fold-expand', Boolean(fold) && Boolean(await waitFor(() => mod.querySelectorAll('.diff-line').length > nLines)),
+    `before=${nLines} after=${mod?.querySelectorAll('.diff-line').length}`);
+  chk('svc-diff-readonly', !document.querySelector('.diff-view textarea, .diff-view .zhupi-float'));
+  document.querySelector('.diff-close')?.click();
+  chk('svc-diff-close', Boolean(await waitFor(() => !document.querySelector('.diff-view'))) && qd() === null && !document.querySelector('.work.work-hidden'),
+    `diff=${qd()}`);
 
   // ⑥ 画可 = approve 带 revision_no=3（所批即所合）；这折带题，画可先走判框答题
   const qinci = await waitFor(() => document.querySelector('.btn-qinci:not([disabled])'));

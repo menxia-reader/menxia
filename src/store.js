@@ -74,6 +74,7 @@ export const markDone = fwd('markDone');
 export const questionsOf = fwd('questionsOf');
 export const requestRefresh = fwd('requestRefresh');
 export const latestRefresh = fwd('latestRefresh');
+export const listRevisions = fwd('listRevisions');
 
 // 错误类型静态直通：消费层不做 instanceof，只认形状（见上错误契约）
 export { ApiError } from './github.js';
