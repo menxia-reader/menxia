@@ -5,7 +5,22 @@ import assert from 'node:assert/strict';
 import {
   validRightLines, parseCommentBody, threadComments, fmtDraft, loadDrafts, saveDrafts, pendingCountFor,
   reanchorByQuote, scrollClosesFloat, FLOAT_SCROLL_GRACE, blockTextIndex, headingIndex, sectionOf,
+  anchorFailure,
 } from '../src/anchor.js';
+
+// ── 锚点 400（docs/ANCHOR-FAIL-UX.md）：认出「第 index 条引文在服务端正文里找不到」，其余错误一律不认 ──
+test('anchorFailure: invalid_argument + field 以 .anchor.quote 结尾 → {index, quote, documentPath}；新字段缺失也认', () => {
+  const e = (status, code, details) => Object.assign(new Error('x'), { status, code, details });
+  assert.deepEqual(anchorFailure(e(400, 'invalid_argument', { field: 'comments.1.anchor.quote', index: 1, quote: '一句话结论：', document_path: 'docs/a.md' })),
+    { index: 1, quote: '一句话结论：', documentPath: 'docs/a.md' });
+  assert.deepEqual(anchorFailure(e(400, 'invalid_argument', { field: 'comments.0.anchor.quote', index: 0 })),
+    { index: 0, quote: '', documentPath: '' });
+  assert.equal(anchorFailure(e(400, 'invalid_argument', { field: 'comments.0.body', index: 0 })), null);
+  assert.equal(anchorFailure(e(400, 'invalid_argument', { field: 'comments.0.anchor.quote' })), null);   // 没 index 标不出哪条
+  assert.equal(anchorFailure(e(409, 'stale_revision', { field: 'comments.0.anchor.quote', index: 0 })), null);
+  assert.equal(anchorFailure(new TypeError('Failed to fetch')), null);
+  assert.equal(anchorFailure(null), null);
+});
 
 // ── 浮批钮遇滚动（2026-11-03：程序滚动晚到把刚出现的「批」收掉）──
 test('scrollClosesFloat: 浮钮刚出现时晚到的程序滚动不收（CI 实测晚 ~500ms）', () => {

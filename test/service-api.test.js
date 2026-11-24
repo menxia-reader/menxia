@@ -213,6 +213,26 @@ test('submitReview：POST /comments/batch 原子体；400 details.index 翻成�
   await assert.rejects(() => svc.submitReview('rv_x', { commitId: 'rv_x@2', comments: [{ quote: 'a' }] }), /新版本/);
 });
 
+// 2026-11-23 Charlie 报：服务模式呈涂归 400，提示却写「GitHub 返回 400」——数据源是门下就说门下（docs/ANCHOR-FAIL-UX.md）
+test('门下错误文案：「门下服务返回 <status>：<code>：<message>」，不出现 GitHub', async () => {
+  stubFetch(() => res(400, { error: { code: 'invalid_argument', message: 'comments[0].anchor.quote not found in the document at the current revision', details: { field: 'comments.0.anchor.quote', index: 0 } } }));
+  await assert.rejects(() => svc.listOpenPRs(), (e) => {
+    assert.equal(e.message, '门下服务返回 400：invalid_argument：comments[0].anchor.quote not found in the document at the current revision');
+    return true;
+  });
+  stubFetch(() => res(500, null));
+  await assert.rejects(() => svc.listOpenPRs(), (e) => /^门下服务返回 500/.test(e.message) && !/GitHub/.test(e.message));
+});
+
+test('batchPayload：whole 草稿 = 改成整折评论（anchor null，正文前加「> 引文」），其余照旧；序号不变', () => {
+  const b = svc.batchPayload({ commitId: 'rv_x@2', comments: [
+    { path: 'docs/a.md', line: 3, quote: '好的', note: '一' },
+    { path: 'docs/a.md', line: 9, quote: '一句话结论：先改头', note: '二', whole: true },
+  ] });
+  assert.deepEqual(b.comments[0].anchor, { document_path: 'docs/a.md', quote: '好的', line: 3 });
+  assert.deepEqual(b.comments[1], { body: '> 一句话结论：先改头\n\n二', anchor: null });
+});
+
 test('createIssueComment（判）：open 折 → decisions request_changes + note；结案折 → 无锚点评论', async () => {
   stubFetch((url, opts, n) => {
     if (n === 1) return res(200, REVIEW);
