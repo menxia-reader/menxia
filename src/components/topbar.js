@@ -28,11 +28,13 @@ export function refreshBarState(req, viewedNo = null) {
   return null;
 }
 
-export function RefreshBar({ req, viewedNo, onReload, onRetry, onDismiss }) {
+export function RefreshBar({ req, viewedNo, onReload, onRetry, onDismiss, onSeeChanges }) {
   const st = refreshBarState(req, viewedNo);
   if (!st) return null;
   return html`<div class=${`refresh-bar refresh-${st.kind}`} role="status">
     <span class="refresh-text">${st.text}</span>
+    ${st.kind === 'done' && onSeeChanges && req.result_revision_no > 1 && html`<button class="refresh-act refresh-see-changes"
+      onClick=${() => onSeeChanges(req.result_revision_no - 1, req.result_revision_no)}>${S.refreshReq.seeChanges}</button>`}
     ${st.kind === 'done' && st.reload && onReload && html`<button class="refresh-act refresh-reload" onClick=${onReload}>${S.refreshReq.doneReload}</button>`}
     ${st.kind === 'failed' && onRetry && html`<button class="refresh-act refresh-retry" onClick=${onRetry}>${S.refreshReq.retry}</button>`}
     ${st.kind === 'done' && !st.reload && onDismiss && html`<button class="refresh-act refresh-dismiss" onClick=${onDismiss}>${S.refreshReq.dismiss}</button>`}
@@ -66,6 +68,9 @@ export function Topbar({
   // 「更新」（门下 D-19，docs/REFRESH-BUTTON.md）：onRefreshReq 为 null＝不露按钮（GitHub 源 / withdrawn / 非拍板人）
   onRefreshReq = null, refreshReq = null, refreshAsk = false, viewedNo = null,
   onRefreshSubmit, onRefreshCancel, onRefreshReload, onRefreshRetry, onRefreshDismiss,
+  // 版本对比 / 可能过时（docs/DIFF-STALE-TOAST.md）：onDiff 为 null＝不露「对比版本」（GitHub 源 / 只有一版）；
+  // staleWeeks>0 且能发起「更新」时题签旁挂灰色「N 周未更新」，点了＝onRefreshReq
+  onDiff = null, onDiffPair = null, staleWeeks = 0,
 }) {
   const pct = percentOf(readStep);
   // 面包屑根词跟折的实际归属走：遗留闲读折在读毕书架（未画可组）、画可折在已画可。写死「待审」
@@ -82,7 +87,9 @@ export function Topbar({
   return html`
         <div class=${'mainbar' + (moreOpen ? ' more-open' : '')}>
           <span class="crumb">${crumbRoot} ${cur ? html`/ <span class="crumb-no">#${cur.pr.number}</span> <b>${cur.pr.title}</b>` : ''}${
-            cur && verifyN > 0 ? html`<span class="verify-count" title=${S.verify.countTitle}>${S.verify.count(verifyN)}</span>` : ''}</span>
+            cur && verifyN > 0 ? html`<span class="verify-count" title=${S.verify.countTitle}>${S.verify.count(verifyN)}</span>` : ''}${
+            cur && staleWeeks > 0 && onRefreshReq ? html`<button class="stale-tag" title=${S.staleTag.title}
+              onClick=${onRefreshReq}>${S.staleTag.label(staleWeeks)}</button>` : ''}</span>
           <span class="actions">
             ${!hasMore && refreshBtn}
             ${cur && html`<button class="btn-ghost" title=${archived ? S.action.zongpiArchivedTitle : ''} onClick=${onZongpi}>${S.action.zongpi}</button>`}
@@ -104,6 +111,8 @@ export function Topbar({
                 ${/* 「更新」排菜单第一项：题签行只露 判/呈/可/⋯ 的约定不破，又是打开菜单第一眼看到的。 */ ''}
                 ${cur && onRefreshReq && html`<button class="btn-ghost more-item refresh-req-btn" title=${S.refreshReq.btnTitle}
                   disabled=${refreshPending(refreshReq)} onClick=${onRefreshReq}>${refreshPending(refreshReq) ? S.refreshReq.btnBusy : S.refreshReq.btn}</button>`}
+                ${cur && onDiff && html`<button class="btn-ghost more-item diff-btn" title=${S.diff.entryTitle}
+                  onClick=${onDiff}>${S.diff.entry}</button>`}
                 ${refreshBtn}
                 <button class="btn-ghost more-item" title=${S.action.copyRefTitle} onClick=${onCopyRef}>${S.action.copyRef}</button>
                 ${happyUrl && html`<button class="btn-ghost more-item" title=${S.action.happyTitle}
@@ -146,16 +155,20 @@ export function Topbar({
         </div>
         ${cur && refreshAsk && html`<${RefreshAsk} onSubmit=${onRefreshSubmit} onCancel=${onRefreshCancel} />`}
         ${cur && html`<${RefreshBar} req=${refreshReq} viewedNo=${viewedNo}
-          onReload=${onRefreshReload} onRetry=${onRefreshRetry} onDismiss=${onRefreshDismiss} />`}
+          onReload=${onRefreshReload} onRetry=${onRefreshRetry} onDismiss=${onRefreshDismiss} onSeeChanges=${onDiffPair} />`}
         ${stale && html`
           <p class="notice stale-banner">
             ${S.stale.banner}
             <button class="btn-ghost stale-reload" onClick=${() => (onUpdate ? onUpdate() : location.reload())}>${S.stale.reload}</button>
           </p>`}
+        ${/* 临时提示（「门下有 N 条新动态」「已刷新」…）浮在正文上方：.notice-layer 是常驻的 0 高度层，
+             条子绝对定位在里面——出现/消失都不占文档流，正文不跳（docs/DIFF-STALE-TOAST.md §3）。 */ ''}
+        <div class="notice-layer">
         ${notice && html`<p class="notice">${notice}${nextUp && html`
           <button class="btn-ghost notice-next" title=${S.merge.nextUpTitle}
             onClick=${onNextUp}>${S.merge.nextUp(nextUp.number, nextUp.title)}</button>`}
           ${/* 手机档提示条是 fixed 浮条，得有地方关；桌面档 .notice-close 不显示（布局不变）。 */ ''}
           ${onNoticeClose && html`<button class="btn-ghost notice-close" title=${S.mobileBar.noticeCloseTitle}
-            onClick=${onNoticeClose}>${S.mobileBar.noticeClose}</button>`}</p>`}`;
+            onClick=${onNoticeClose}>${S.mobileBar.noticeClose}</button>`}</p>`}
+        </div>`;
 }

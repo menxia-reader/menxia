@@ -343,8 +343,58 @@ main { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: colum
 }
 /* 画可后的落地条：折不跳，下一折做成他自己踩的踏板 */
 .notice-next { margin-left: 12px; padding: 3px 12px; font-size: 13px; vertical-align: baseline; }
-/* 关闭钮只在手机档的浮条上露（见 ≤900 块）；桌面提示条仍随顶栏，布局不变。 */
+/* 临时提示浮层（docs/DIFF-STALE-TOAST.md §3）：.notice-layer 常驻、0 高度，条子绝对定位浮在正文上方——
+   出现/消失不占文档流，正文首行不移位（冒烟 svc-toast-no-shift 钉住）。左右与题签行同一条式子对齐版心。
+   既然浮着会盖住正文，桌面也露关闭钮。手机档仍由 ≤900 块改成贴底栏的 fixed 浮条（同选择器权重、后写者胜）。 */
+.notice-layer { flex: none; position: relative; height: 0; z-index: 30; }
+.notice-layer > .notice {
+  position: absolute; top: 0; margin: 10px 0 0;
+  left: max(var(--work-pad), calc((100% - var(--stage)) / 2));
+  right: max(var(--work-pad), calc((100% - var(--stage)) / 2));
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px;
+  box-shadow: 0 4px 16px var(--shadow);
+}
 .notice-close { display: none; }
+.notice-layer > .notice .notice-close { display: inline-flex; align-items: center; margin-left: auto; padding: 0 10px; }
+
+/* 「可能过时」小标签：灰色、不用红（不是错误，只是提醒）。清单行与题签旁同一个样子。 */
+.stale-tag {
+  display: inline-block; margin-left: 8px; padding: 0 6px; font: inherit; font-size: var(--t-xs);
+  letter-spacing: 0; line-height: 1.6; color: var(--ink-soft); background: transparent;
+  border: 1px solid var(--rule); border-radius: 2px; cursor: pointer; vertical-align: baseline;
+}
+.stale-tag:hover { color: var(--ink); border-color: var(--ink-soft); }
+
+/* 版本对比页：只读。删除浅红底、新增浅绿底，正文仍是墨色；改动行内的字再深一档底色。 */
+.diff-view { flex: 1; min-height: 0; overflow-y: auto; padding: 24px var(--work-pad) 60px;
+  padding-inline: max(var(--work-pad), calc((100% - var(--stage)) / 2)); }
+.diff-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; }
+.diff-title { font-family: var(--songti); font-size: var(--t-body); letter-spacing: .1em; }
+.diff-picker { display: inline-flex; align-items: center; gap: 8px; font-size: var(--t-s); }
+.diff-picker select { font: inherit; padding: 2px 6px; }
+.diff-readonly { font-size: var(--t-xs); color: var(--ink-soft); }
+.diff-close { margin-left: auto; }
+.diff-summary { font-size: var(--t-s); color: var(--ink-soft); margin: 0 0 14px; }
+.diff-doc { margin: 0 0 22px; border: 1px solid var(--rule); background: var(--paper-raised); }
+.diff-doc-head { margin: 0; padding: 8px 12px; font-size: var(--t-s); font-weight: normal; border-bottom: 1px solid var(--rule); }
+.diff-doc-same .diff-doc-head, .diff-doc-added .diff-doc-head, .diff-doc-removed .diff-doc-head { border-bottom: 0; }
+.diff-kind { display: inline-block; padding: 0 6px; margin-right: 6px; border: 1px solid var(--rule); font-size: var(--t-xs); color: var(--ink-soft); }
+.diff-kind-added { background: rgba(46, 160, 67, .14); color: var(--ink); }
+.diff-kind-removed { background: rgba(220, 60, 60, .12); color: var(--ink); }
+.diff-path { font-family: var(--mono); font-size: var(--t-xs); }
+.diff-doc .state { margin: 8px 12px; }
+.diff-rows { font-size: var(--t-s); line-height: 1.7; }
+.diff-line { display: grid; grid-template-columns: 3.2em 3.2em 1.4em 1fr; color: var(--ink); }
+.diff-line.diff-del { background: rgba(220, 60, 60, .12); }
+.diff-line.diff-add { background: rgba(46, 160, 67, .14); }
+.diff-del .diff-ch { background: rgba(220, 60, 60, .30); color: var(--ink); }
+.diff-add .diff-ch { background: rgba(46, 160, 67, .32); color: var(--ink); }
+.diff-no { text-align: right; padding-right: 6px; color: var(--ink-soft); font-size: var(--t-xs); font-variant-numeric: tabular-nums; user-select: none; }
+.diff-sign { text-align: center; color: var(--ink-soft); user-select: none; }
+.diff-text { white-space: pre-wrap; word-break: break-word; padding-right: 10px; }
+.diff-fold { display: block; width: 100%; padding: 3px 0; font: inherit; font-size: var(--t-xs); color: var(--ink-soft);
+  background: transparent; border: 0; border-block: 1px dashed var(--rule); cursor: pointer; }
+.diff-fold:hover { color: var(--ink); }
 
 /* 「更新」（门下 D-19）：小框 + 题签下的状态条。沿用 .notice 的纸色条，只在有请求时出现。 */
 .refresh-ask, .refresh-bar {

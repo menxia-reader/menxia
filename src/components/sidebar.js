@@ -5,6 +5,7 @@ import { S } from '../strings.js';
 import { folderSummary, DECISIONS_TITLE } from './folder-body.js';
 import { splitShelf, shelfOf, kindOf, qianOf } from '../track.js';
 import { matchesQuery, hitsElsewhere, prNumberOf } from '../search.js';
+import { staleWeeks } from '../stale.js';
 
 /**
  * 清单卡的摘要行（F1，2026-07-31）：一句 TLDR gist + 「待你拍板 · n 条」角标。
@@ -53,10 +54,12 @@ function verifyBadge(n) {
  *
  * `unread`：书架里的遗留闲折（open、未画可）。角标只在书架栏挂——已画可栏与待审栏都不该出现它。
  */
-function folderCard({ pr, cur, timeAgo, checks, verifyCounts, onOpenPR, shelf = false, unread = false }) {
+function folderCard({ pr, cur, timeAgo, checks, verifyCounts, onStale, onOpenPR, shelf = false, unread = false }) {
   const kind = shelf ? kindOf(pr) : null;
   // 签 chip 三处（待审 / 读毕书架 / 已画可）都出，与卡面 meta 同一套视觉语言，小、不抢戏。
   const qians = qianOf(pr);
+  // 卡本身是 <button>，标签不能再嵌 button——用 span[role=button]，点它不触发开折以外的卡点击
+  const stale = onStale ? staleWeeks(pr) : 0;
   return html`
               <button key=${pr.number} class=${'pr-item' + (cur?.pr.number === pr.number ? ' active' : '') + (pr.merged_at ? ' pr-done' : '') + (unread ? ' pr-unread' : '')}
                 onClick=${() => onOpenPR(pr)}>
@@ -66,6 +69,9 @@ function folderCard({ pr, cur, timeAgo, checks, verifyCounts, onOpenPR, shelf = 
                   pr.merged_at || pr.closed_at ? null : checkBadge(checks[pr.number])}${verifyBadge(verifyCounts[pr.number])}${
                   unread ? html`<span class="unread-chip">${S.shelf.unreadChip}</span>` : null}${
                   kind ? html`<span class="kind-chip">${kind}</span>` : null}${
+                  stale ? html`<span class="stale-tag" role="button" tabindex="0" title=${S.staleTag.title}
+                    onClick=${(e) => { e.stopPropagation(); onStale(pr); }}
+                    onKeyDown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onStale(pr); } }}>${S.staleTag.label(stale)}</span>` : null}${
                   qians.map((w) => html`<span class="qian-chip" key=${'q' + w}>${w}</span>`)}</div>
                 ${summaryLine(pr)}
               </button>`;
@@ -86,6 +92,8 @@ export function Sidebar({
   qian = null, onQian = () => {},
   onQuery, onSearch, onClearSearch, onJumpToHit, onTab, onOpenPR, onSettings, onDash,
   onOpenElsewhere = null, onGripDown = null, onGripReset = null,
+  // 「可能过时」（docs/DIFF-STALE-TOAST.md）：null＝不标（GitHub 源 / 不能发起更新）；给了就在过时的卡上挂灰标签，点了 onStale(pr)
+  onStale = null,
 }) {
   // 即输即过滤：标题含词，或折号精确命中（`174` / `#174`）。
   const match = (p) => matchesQuery(p, q);
@@ -112,7 +120,7 @@ export function Sidebar({
     : tab === 'closed' ? (closedPrs || []).filter(match) : split.desk;
   const emptyMsg = tab === 'done' ? S.nav.emptyDone : tab === 'shelf' ? S.nav.emptyShelf
     : tab === 'closed' ? (closedPrs ? S.nav.emptyClosed : S.nav.closedLoading) : S.nav.emptyOpen;
-  const card = (pr, extra = {}) => folderCard({ pr, cur, timeAgo, checks, verifyCounts, onOpenPR, ...extra });
+  const card = (pr, extra = {}) => folderCard({ pr, cur, timeAgo, checks, verifyCounts, onStale, onOpenPR, ...extra });
   // 过滤只看当前栏会漏：他在书架栏搜 #174，而那折在待审。当前栏没命中、或查的是折号时，
   // 把别的栏的命中也列出来、标明在哪栏，点了切过去打开（2026-10-27 报告）。
   const elsewhere = q.trim() && (!list.length || prNumberOf(q) != null)
@@ -124,7 +132,7 @@ export function Sidebar({
             ${elsewhere.map(({ pr, tab: t }) => html`
               <div class="elsewhere-item" key=${'e' + pr.number} data-elsewhere-tab=${t}>
                 <span class="kind-chip">${S.search.tabName[t]}</span>
-                ${folderCard({ pr, cur, timeAgo, checks, verifyCounts, onOpenPR: (p) => openElsewhere(p, t) })}
+                ${folderCard({ pr, cur, timeAgo, checks, verifyCounts, onStale, onOpenPR: (p) => openElsewhere(p, t) })}
               </div>`)}
           </div>` : '';
   return html`
@@ -164,7 +172,7 @@ export function Sidebar({
         <nav id="pr-list" class="qian-list">
           <p class="qian-crumb">${S.qian.crumb(qian)}</p>
           ${qianList.length
-            ? qianList.map((pr) => folderCard({ pr, cur, timeAgo, checks, verifyCounts, onOpenPR, shelf: false }))
+            ? qianList.map((pr) => folderCard({ pr, cur, timeAgo, checks, verifyCounts, onStale, onOpenPR, shelf: false }))
             : html`<p class="state">${q.trim() ? S.search.noTitleMatch(q.trim()) : S.qian.empty(qian)}</p>`}
         </nav>`}
         ${!hits && !qActive && html`

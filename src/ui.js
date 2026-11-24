@@ -33,6 +33,9 @@ import { Outline, ChapterList, ChapterRail } from './components/outline.js';
 import { ScrollEnds, scroller } from './components/scroll-ends.js';
 import { Dashboard } from './components/dashboard.js';
 import { NavPage } from './components/nav-page.js';
+import { DiffView } from './components/diff-view.js';
+import { parseDiffParam, diffParam } from './diff.js';
+import { staleWeeks } from './stale.js';
 import { extractOutline, hasOutline, chapterList, shouldUseChapterList, chapterName } from './toc.js';
 import {
   ART_MIN, TOC_MIN, ART_MIN_WINDOW, TOC_MIN_WINDOW, ART_KEY, TOC_KEY,
@@ -96,6 +99,7 @@ const BUILD_FILES = ['index.html', 'src/style.css', 'src/ui.js', 'src/github.js'
   'src/cols.js',
   'src/slug.js', 'src/components/scroll-ends.js', 'src/components/image-view.js',
   'src/components/dashboard.js', 'src/components/nav-page.js',
+  'src/diff.js', 'src/stale.js', 'src/components/diff-view.js',
   // verify.js 是**存量漏网**（F13 那次就没登记，不是本次改动带来的），由 build-files.test.js 揪出来
   'src/verify.js',
   // M2 离线包新增源文件（sw.js 在仓根、不在 src/ 下，故不进这张只管 src/ 的清单；
@@ -231,6 +235,9 @@ function App() {
   // 「更新」（门下 D-19，docs/REFRESH-BUTTON.md）：本折最新一条 refresh 请求 + live（本次会话亲眼看着变的）
   const [refreshReq, setRefreshReq] = useState(null);  // { rid, request_id, status, result_revision_no, error, note, live } | null
   const [refreshAsk, setRefreshAsk] = useState(false); // 「要更新什么」小框开着没
+  // 版本对比（docs/DIFF-STALE-TOAST.md）：{a, b} | null。URL ?diff=a..b 只在开机时认一次（深链开折之后套上）
+  const [diff, setDiff] = useState(null);
+  const bootDiff = useRef(parseDiffParam(params.get('diff')));
 
   const docRef = useRef(null);
   const autoRan = useRef(false); // 冒烟只跑一次（切折会让 docTick 回到 1）
@@ -254,6 +261,7 @@ function App() {
   openRef.current = openPR;   // popstate 监听只绑一次，开折走这面镜子拿最新的 openPR
 
   const say = useCallback((t) => setNotice(t), []);
+  if (DEMO) window.__say = say;   // 冒烟：直接放一条临时提示，量正文是否移位（svc-toast-no-shift）
 
   // 把暂存的深链提示放出来。openPR 一进门就 setNotice('')，所以得等它之后再送——
   // 缺了这一步，pendingNotice 就是只写不读，深链失败会全程静默（#7 顺带修）。
@@ -446,6 +454,7 @@ function App() {
           if (dl.path) jumpRef.current = { prNumber: target.number, path: dl.path, line: dl.line || 1 };
           setTab(target.merged_at ? 'done' : 'open');
           openPR(target);
+          applyBootDiff();
           flushPending();
           return;
         }
@@ -455,7 +464,7 @@ function App() {
           : S.deepLink.noFolderNumber;
       }
       // 在途中用户已手点开折子就别顶掉他。demo 带 ?list=1 时停在清单页（手机档截图用）。
-      if (list.length && !R.current.cur && !(DEMO && params.get('list') === '1')) openPR(list[0]);
+      if (list.length && !R.current.cur && !(DEMO && params.get('list') === '1')) { openPR(list[0]); applyBootDiff(); }
       flushPending();
       return list;                                        // 画可后要据此算「下一折是谁」
     } catch (err) {
@@ -513,6 +522,7 @@ function App() {
     setBodyOpen(hasDecisions(pr.body) && !isPhone());
     setCur({ pr, files: null, docs: null });
     setRefreshAsk(false);
+    setDiff(null);
     // 同一折重开（事件刷新切到新版）保留 live，换折清空；详情回来再按 svc.refresh 补
     setRefreshReq((r) => (r && r.rid === pr.number ? r : null));
     setDrafts(A.loadDrafts(pr.number));
@@ -1025,13 +1035,18 @@ function App() {
     } else if (n != null && history.state?.menxia === 'folder') {
       history.replaceState({ ...history.state, pr: n }, '');  // 折里换折：顶掉栈顶，不叠
     }
-    if (DEMO) return;
-    const url = cur?.pr
+    // 对比页：?diff=a..b 跟着走（可分享、刷新保持）。demo 不改 pr/path（冒烟要留 ?demo=1…），只同步 diff 一项
+    const withDiff = (u) => {
+      const x = new URL(u);
+      if (cur?.pr && diff) x.searchParams.set('diff', diffParam(diff)); else x.searchParams.delete('diff');
+      return x.href;
+    };
+    const url = withDiff(DEMO ? location.href : cur?.pr
       ? buildDeepLink(location.origin + location.pathname,
         { repo: gh.getRepoSlug(), prNumber: cur.pr.number, path: docPath })
-      : location.origin + location.pathname;
+      : location.origin + location.pathname);
     if (location.href !== url) history.replaceState(history.state, '', url);
-  }, [cur?.pr?.number, docPath]);
+  }, [cur?.pr?.number, docPath, diff?.a, diff?.b]);
 
   // 返回键 / 侧滑：落到清单项 → 回清单并还原滚动；落到折项（前进）→ 重开那一折。
   useEffect(() => {
@@ -1459,6 +1474,22 @@ function App() {
     const list = await loadPRs();
     const fresh = (list || []).find((p) => p.number === c.pr.number);
     openPR(fresh || c.pr);
+  }
+
+  // ── 版本对比（docs/DIFF-STALE-TOAST.md）：只门下服务（有 listRevisions）且 ≥2 版时可用 ──
+  const diffable = (c) => Boolean(c && can('listRevisions') && (c.pr.svc?.revision_no ?? 0) >= 2);
+  function openDiff(a, b) {
+    const c = R.current.cur;
+    setMoreOpen(false);
+    if (!diffable(c)) { say(S.diff.needTwo); return; }
+    const n = c.pr.svc.revision_no;
+    setDiff(a && b ? { a, b } : { a: n - 1, b: n });
+  }
+  // 开机深链 ?diff=a..b：在开折（openPR 会清 diff）之后套上，只认一次
+  function applyBootDiff() {
+    const d = bootDiff.current;
+    bootDiff.current = null;
+    if (d) setDiff(d);
   }
 
   // ── 关（reject，门下）：结案不合。带题先答题（判框 reject 态），否则确认框直接发。
@@ -1943,7 +1974,12 @@ function App() {
         onOpenElsewhere=${(pr, t) => { setTab(t); setDash(false); openPR(pr); }}
         onDash=${() => setDash((d) => !d)}
         onSettings=${() => { setPhase('setup'); setSetupMsg(''); }}
-        onGripDown=${onGripDown} onGripReset=${onGripReset} />
+        onGripDown=${onGripDown} onGripReset=${onGripReset}
+        onStale=${can('requestRefresh') ? (pr) => {
+          setDash(false);
+          if (R.current.cur?.pr.number !== pr.number) openPR(pr);
+          setMoreOpen(false); setRefreshAsk(true);
+        } : null} />
       <main>
         <${Topbar} cur=${cur} archived=${archived} onHead=${onHead} busy=${busy}
           draftCount=${drafts.length} verifyN=${verifyN} happyUrl=${happyUrl} stale=${stale} notice=${notice}
@@ -1974,7 +2010,10 @@ function App() {
           onRefreshSubmit=${sendRefresh} onRefreshCancel=${() => setRefreshAsk(false)}
           onRefreshReload=${reloadForRefresh}
           onRefreshRetry=${() => sendRefresh(refreshReq?.note || '')}
-          onRefreshDismiss=${() => setRefreshReq(null)} />
+          onRefreshDismiss=${() => setRefreshReq(null)}
+          onDiff=${diffable(cur) ? () => openDiff() : null}
+          onDiffPair=${diffable(cur) ? (a, b) => openDiff(a, b) : null}
+          staleWeeks=${cur ? staleWeeks(cur.pr) : 0} />
         ${dash && html`
           <${Dashboard} prs=${prs} donePrs=${donePrs} cur=${cur} timeAgo=${timeAgo}
             onOpen=${(pr) => { setDash(false); openPR(pr); }}
@@ -1993,7 +2032,14 @@ function App() {
             onSection=${jumpFromNav} />`}
         ${/* 总览开着时**藏**读折区而不是卸载它：#doc 是 ref 挂的岛屿，
              卸载会连同已渲染的正文与批注锚点一起丢，回来要整篇重取重渲。 */ ''}
-        <div class=${'work' + (dash ? ' work-hidden' : '')} onClick=${onAnchorClick}>
+        ${/* 版本对比页：与总览同一手法——藏读折区（保住 #doc 岛屿）而不卸载；对比页只读，不挂划选。 */ ''}
+        ${diff && cur && !dash && html`
+          <${DiffView} key=${cur.pr.number} id=${cur.pr.number} a=${diff.a} b=${diff.b}
+            listRevisions=${(id) => api.listRevisions(id)}
+            loadText=${(no, path) => api.getFileText(path, `${cur.pr.number}@${no}`)}
+            onPick=${(a, b) => { if (a !== b) setDiff({ a, b }); }}
+            onClose=${() => setDiff(null)} />`}
+        <div class=${'work' + (dash || (diff && cur) ? ' work-hidden' : '')} onClick=${onAnchorClick}>
         <div class="stage-row">
           ${cur?.docs?.length > 1 && useChapterList && html`
             <${ChapterRail} chapters=${chapters} onOpenChapter=${openChapter} />`}

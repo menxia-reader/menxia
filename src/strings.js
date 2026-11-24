@@ -106,6 +106,35 @@ export const S = deepFreeze({
     retry: '重试',
     dismiss: '知道了',
     sendFailed: (msg) => `更新没发出去：${msg}`,
+    seeChanges: '看改了什么',
+  },
+
+  // 版本对比（docs/DIFF-STALE-TOAST.md）：只读，按文档列 新增 / 删除 / 修改 / 未改
+  diff: {
+    entry: '对比版本',
+    entryTitle: '看两版之间改了什么（默认上一版 → 当前版）',
+    title: '版本对比',
+    from: '从',
+    to: '到',
+    close: '回到正文',
+    readonly: '只读：批注请回正文',
+    added: '新增',
+    removed: '删除',
+    modified: '修改',
+    same: '未改',
+    noChange: '两版文档完全一样',
+    loading: '取正文中…',
+    failed: (msg) => `取不到正文：${msg}`,
+    fold: (n) => `展开 ${n} 行未改动`,
+    needTwo: '这折只有一个版本，没得比',
+    badVersion: (a, b) => `没有 v${a} 或 v${b}，已改为上一版 → 当前版`,
+    summary: (n) => (n ? `${n} 篇文档有改动` : '文档没有改动'),
+  },
+
+  // 「可能过时」（门下服务）：当前版本放了三周以上；点了 = 打开「更新」小框
+  staleTag: {
+    label: (w) => `${w} 周未更新`,
+    title: '当前版本放了很久，可能不新鲜了——点一下派任务更新',
   },
 
   // 拍板（门下服务）：判框里按 questions 作答；画可 / 关 / 留
