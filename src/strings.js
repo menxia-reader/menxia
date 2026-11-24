@@ -386,6 +386,7 @@ export const S = deepFreeze({
   // 折清单拉取
   list: {
     rateLimited: '碰到 GitHub 限流，缓一会儿再刷新。',
+    rateLimitedSvc: '碰到门下服务限流，缓一会儿再刷新。',   // 数据源是门下就别说 GitHub（docs/ANCHOR-FAIL-UX.md）
     failed: (msg) => `拉取失败：${msg}`,
   },
 
@@ -529,6 +530,14 @@ export const S = deepFreeze({
     inlineBody: (n) => `门下 · ${n} 条`,
     done: (inlineN, fallbackN) => `已呈回 ${inlineN} 条涂归${fallbackN ? `（${fallbackN} 条并入判）` : ''}——回 Hermes 说「读批注」。`,
     failed: (msg) => `呈递失败（草稿都还在）：${msg}`,
+    // 锚点 400（docs/ANCHOR-FAIL-UX.md）：标出第 n 条，给「改成整折评论再呈 / 取消」，草稿一条不动
+    anchorFailed: (n) => `第 ${n} 条涂归的引文在门下当前版本里找不到，整批没呈（草稿都还在）。`,
+    anchorFailTitle: (n) => `第 ${n} 条的引文在门下当前版本里找不到`,
+    anchorFailQuote: (q) => `「${q}」`,
+    anchorFailHint: '可以把这条改成整折评论（不钉在原句上，正文前带一行引文），和其余涂归一起再呈；或者取消，草稿留着自己改。',
+    anchorFailWhole: '改成整折评论再呈',
+    anchorFailCancel: '取消',
+    wholeTag: '整折评论',
   },
 
   // 呈判

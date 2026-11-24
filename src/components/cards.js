@@ -10,14 +10,16 @@ import { S } from '../strings.js';
 // 2026-08-05 报障「我想过去加东西，结果点不开那个评论栏了」——空草稿改不了（点不着）、
 // 删不掉（作罢钮只在编辑态里）、又过不了呈回闸门（空批注不呈），三头堵死。
 // 空草稿本身已由 ui.js 的 editElsewhere 在切走焦点时收掉；这里是给存量草稿留的退路。
-export function DraftCard({ d, doc, heads, editing, onEdit, onSave, onDrop }) {
+// failed：呈出时服务端说这条的引文找不到（锚点 400，docs/ANCHOR-FAIL-UX.md）→ 标红；d.whole：已改成整折评论
+export function DraftCard({ d, doc, heads, editing, failed = false, onEdit, onSave, onDrop }) {
   const taRef = useRef();
   useEffect(() => { if (editing) setTimeout(() => taRef.current?.focus(), 0); }, [editing]);
   const sec = doc ? A.sectionOf(doc, d.blockLine, heads) : '';   // heads：ui.js 备的标题快照，缺省现查
   return html`
-    <div class="anno-card" data-block-line=${d.blockLine} key=${d.id}>
+    <div class=${'anno-card' + (failed ? ' anno-failed' : '')} data-block-line=${d.blockLine} data-draft-id=${d.id} key=${d.id}
+      aria-invalid=${failed ? 'true' : undefined}>
       <div class="anno-quote">${S.card.quote(d.quote.length > 80 ? d.quote.slice(0, 80) + '…' : d.quote)}</div>
-      <div class="anno-src">${S.card.srcLine(sec, d.line)}</div>
+      <div class="anno-src">${S.card.srcLine(sec, d.line)}${d.whole ? html` · <span class="anno-whole">${S.submit.wholeTag}</span>` : ''}</div>
       ${editing ? html`
         <textarea class="anno-input" ref=${taRef} placeholder=${S.card.draftPlaceholder} defaultValue=${d.note}
           onKeyDown=${(e) => {
@@ -37,6 +39,20 @@ export function DraftCard({ d, doc, heads, editing, onEdit, onSave, onDrop }) {
           onClick=${() => onEdit(d.id)}
           onKeyDown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onEdit(d.id); } }}
           >${d.note || S.card.emptyNote}</div>`}
+    </div>`;
+}
+
+// 锚点 400 的问询条（docs/ANCHOR-FAIL-UX.md）：哪条（第 n 条 + 它的引文）、两条路。和「更新」小框同一种条，挂在顶栏下。
+export function AnchorFailBar({ f, busy, onWhole, onCancel }) {
+  return html`
+    <div class="refresh-bar anchor-fail" role="alertdialog" aria-label=${S.submit.anchorFailTitle(f.n)}>
+      <span class="anchor-fail-title">${S.submit.anchorFailTitle(f.n)}</span>
+      <q class="anchor-fail-quote">${S.submit.anchorFailQuote(f.quote.length > 80 ? f.quote.slice(0, 80) + '…' : f.quote)}</q>
+      <span class="anchor-fail-hint">${S.submit.anchorFailHint}</span>
+      <span class="refresh-ask-btns">
+        <button class="btn-ghost refresh-act anchor-fail-cancel" onClick=${onCancel}>${S.submit.anchorFailCancel}</button>
+        <button class="btn-primary refresh-act anchor-fail-whole" disabled=${busy} onClick=${onWhole}>${S.submit.anchorFailWhole}</button>
+      </span>
     </div>`;
 }
 

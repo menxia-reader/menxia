@@ -20,7 +20,7 @@ import {
 } from './theme.js';
 import { getRailWidth, setRailWidth, clearRailWidth, clampRail, railMax, isResizable, RAIL_MIN, railCeilLending, railLend } from './rail.js';
 import { Setup } from './components/setup.js';
-import { DraftCard, ShownThread, ZongpiCard } from './components/cards.js';
+import { DraftCard, ShownThread, ZongpiCard, AnchorFailBar } from './components/cards.js';
 import { Sidebar } from './components/sidebar.js';
 import { Topbar } from './components/topbar.js';
 import { OtherThreads } from './components/other-threads.js';
@@ -235,6 +235,8 @@ function App() {
   // 「更新」（门下 D-19，docs/REFRESH-BUTTON.md）：本折最新一条 refresh 请求 + live（本次会话亲眼看着变的）
   const [refreshReq, setRefreshReq] = useState(null);  // { rid, request_id, status, result_revision_no, error, note, live } | null
   const [refreshAsk, setRefreshAsk] = useState(false); // 「要更新什么」小框开着没
+  // 锚点 400（docs/ANCHOR-FAIL-UX.md）：{ prNumber, draftId, n, quote } | null——标出那条草稿，问「改成整折评论再呈 / 取消」
+  const [anchorFail, setAnchorFail] = useState(null);
   // 版本对比（docs/DIFF-STALE-TOAST.md）：{a, b} | null。URL ?diff=a..b 只在开机时认一次（深链开折之后套上）
   const [diff, setDiff] = useState(null);
   const bootDiff = useRef(parseDiffParam(params.get('diff')));
@@ -469,7 +471,7 @@ function App() {
       return list;                                        // 画可后要据此算「下一折是谁」
     } catch (err) {
       if (err.tokenDead) { gh.clearToken(); setPhase('setup'); setSetupMsg(S.setup.tokenDead); return; }
-      say(err.rateLimited ? S.list.rateLimited : S.list.failed(err.message));
+      say(err.rateLimited ? (BACKEND === 'service' ? S.list.rateLimitedSvc : S.list.rateLimited) : S.list.failed(err.message));
     }
   }
 
@@ -522,6 +524,7 @@ function App() {
     setBodyOpen(hasDecisions(pr.body) && !isPhone());
     setCur({ pr, files: null, docs: null });
     setRefreshAsk(false);
+    setAnchorFail((f) => (f && f.prNumber === pr.number ? f : null));
     setDiff(null);
     // 同一折重开（事件刷新切到新版）保留 live，换折清空；详情回来再按 svc.refresh 补
     setRefreshReq((r) => (r && r.rid === pr.number ? r : null));
@@ -1311,9 +1314,10 @@ function App() {
   }
 
   // ── 呈回 ──
-  async function submitAll() {
+  // dsOverride：「改成整折评论再呈」刚改完草稿就重发，等不及下一次渲染刷新 R（按钮 onClick 传进来的是事件，不是数组）
+  async function submitAll(dsOverride) {
     const c = R.current.cur;
-    const ds = R.current.drafts;
+    const ds = Array.isArray(dsOverride) ? dsOverride : R.current.drafts;
     if (!c || !ds.length || R.current.busy) return;
     if (R.current.archived) return say(S.submit.archivedReadonly);
     if (!R.current.onHead) return say(S.submit.oldRevBlocked);
@@ -1331,7 +1335,8 @@ function App() {
     ds.forEach((d) => {
       const stale = d.ref !== ref; // 旧版本草稿：行号可能漂移，宁降判不钉错行
       if (byQuote) {
-        if (!stale && d.quote) inline.push({ path: d.path, line: d.line, side: 'RIGHT', body: A.fmtDraft(d), note: d.note, quote: d.quote });
+        // draftId：服务端 400 只回 details.index（= 这份 inline 的下标），靠它找回是哪条草稿；whole = 他已选「改成整折评论」
+        if (!stale && d.quote) inline.push({ path: d.path, line: d.line, side: 'RIGHT', body: A.fmtDraft(d), note: d.note, quote: d.quote, whole: Boolean(d.whole), draftId: d.id });
         else fallback.push(d);
         return;
       }
@@ -1348,15 +1353,34 @@ function App() {
       await api.submitReview(prNumber, { body, comments: inline, commitId: ref, fallbackBody: fallback.length ? body : '' });
       A.saveDrafts(prNumber, []); // 直接清对应 key；内存只在世界没变时动
       if (R.current.cur?.pr.number === prNumber) setDrafts([]);
+      setAnchorFail(null);
       loadComments(prNumber); // 重拉已呈串：让刚呈的立即出现在右缘（世界守卫在 loadComments 内）
       say(S.submit.done(inline.length, fallback.length));
     } catch (err) {
-      say(S.submit.failed(err.message));
+      // 锚点 400：整批原子没落库。不「整批失败了事」——标出第 index 条、问他要不要把它改成整折评论再呈；草稿一条不动
+      const af = byQuote ? A.anchorFailure(err) : null;
+      const hit = af && inline[af.index];
+      if (hit && !hit.whole) {
+        setAnchorFail({ prNumber, draftId: hit.draftId, n: af.index + 1, quote: hit.quote });
+        say(S.submit.anchorFailed(af.index + 1));
+      } else {
+        say(S.submit.failed(err.message));
+      }
     } finally {
       setBusy(false);
     }
   }
   submitRef.current = submitAll;
+
+  // 「改成整折评论再呈」：只把出事那条标 whole（落盘，刷新也在），其余不动，整批重发。成功才清草稿（submitAll 里）
+  function anchorFailWhole() {
+    const f = anchorFail;
+    setAnchorFail(null);
+    if (!f || R.current.cur?.pr.number !== f.prNumber) return;
+    const next = R.current.drafts.map((d) => (d.id === f.draftId ? { ...d, whole: true } : d));
+    mutateDrafts(f.prNumber, () => next);
+    submitAll(next);
+  }
 
   // 这折要答的题（门下详情里的 questions；GitHub 恒空）
   const svcQuestions = cur?.pr?.svc?.questions || [];
@@ -1576,6 +1600,7 @@ function App() {
     ...docDrafts.map((d) => ({
       blockLine: d.blockLine,
       el: html`<${DraftCard} key=${d.id} d=${d} doc=${docRef.current} heads=${docHeads} editing=${editing === d.id}
+        failed=${anchorFail?.draftId === d.id}
         onEdit=${editElsewhere} onSave=${saveDraft} onDrop=${dropDraft} />`,
     })),
     ...docThreads.map(({ t, blockLine, outdated }) => ({
@@ -2014,6 +2039,8 @@ function App() {
           onDiff=${diffable(cur) ? () => openDiff() : null}
           onDiffPair=${diffable(cur) ? (a, b) => openDiff(a, b) : null}
           staleWeeks=${cur ? staleWeeks(cur.pr) : 0} />
+        ${cur && anchorFail && anchorFail.prNumber === cur.pr.number && html`
+          <${AnchorFailBar} f=${anchorFail} busy=${busy} onWhole=${anchorFailWhole} onCancel=${() => setAnchorFail(null)} />`}
         ${dash && html`
           <${Dashboard} prs=${prs} donePrs=${donePrs} cur=${cur} timeAgo=${timeAgo}
             onOpen=${(pr) => { setDash(false); openPR(pr); }}

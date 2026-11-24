@@ -192,7 +192,11 @@ async function handle(url, init) {
     for (let i = 0; i < (b.comments || []).length; i++) {
       const a = b.comments[i].anchor;
       if (!b.comments[i].body) return ERR(400, 'invalid_argument', 'body required', { index: i });
-      if (a && (a.document_path !== 'docs/demo.md' || !text.includes(norm(a.quote)))) return ERR(400, 'invalid_argument', 'quote not found', { index: i });
+      // 与 services/comments.ts createCommentsBatch 同契约：details {field, index}（新版服务端另附 quote/document_path，这里故意不给，验缺失兼容）。
+      // 判据也同：在 markdown 原文里找——划选跨了链接/粗体的渲染文本就找不到，正是 2026-11-23 报障的形状
+      if (a && (a.document_path !== 'docs/demo.md' || !text.includes(norm(a.quote)))) {
+        return ERR(400, 'invalid_argument', `comments[${i}].anchor.quote not found in the document at the current revision`, { field: `comments.${i}.anchor.quote`, index: i });
+      }
     }
     state.batches.push(b);
     return J({ items: b.comments.map((c) => mkComment(c, cur().revision_no)) }, 201);
@@ -397,6 +401,29 @@ export async function runSvcSmoke(docEl) {
     `shown=${document.querySelectorAll('.anno-quote-shown').length}`);
   chk('svc-submit-button-gone', Boolean(await waitFor(() => !document.querySelector('.btn-submit'))));
 
+  // ③b 锚点 400（docs/ANCHOR-FAIL-UX.md）：第 2 条划选跨了链接，渲染文本在 markdown 原文里找不到 → 整批 400。
+  // 不许整批失败了事：问询条标出第 2 条与其引文、该草稿标红、草稿一条不丢；点「改成整折评论再呈」→ 同批重发成功、草稿清空
+  const draftCards = () => document.querySelectorAll('#margin-col .anno-card:not(.anno-shown):not(.zongpi-card)');
+  const nBatches = state.batches.length;
+  const pickedB = [
+    await pick('第 3 段填充', '这条锚得上'),
+    await pick('见 另一折 与 本折某行', '这条跨了链接'),
+  ];
+  chk('svc-anchorfail-drafts-made', pickedB.every(Boolean) && draftCards().length === 2, `picked=${pickedB} n=${draftCards().length}`);
+  document.querySelector('.btn-submit')?.click();
+  const bar = await waitFor(() => document.querySelector('.anchor-fail'));
+  chk('svc-anchorfail-bar-shown', Boolean(bar) && bar.textContent.includes('第 2 条') && bar.textContent.includes('见 另一折 与 本折某行'), bar?.textContent);
+  chk('svc-anchorfail-no-github-wording', !document.body.textContent.includes('GitHub 返回'));
+  const failedCard = document.querySelector('.anno-card.anno-failed');
+  chk('svc-anchorfail-card-marked', Boolean(failedCard) && failedCard.textContent.includes('这条跨了链接'), failedCard?.textContent);
+  chk('svc-anchorfail-drafts-kept', draftCards().length === 2 && state.batches.length === nBatches, `drafts=${draftCards().length} batches=${state.batches.length}`);
+  bar?.querySelector('.anchor-fail-whole')?.click();
+  const b2 = await waitFor(() => state.batches[nBatches]);
+  chk('svc-anchorfail-whole-resent', Boolean(b2) && b2.comments.length === 2 && b2.comments[0].anchor?.quote === '第 3 段填充'
+    && b2.comments[1].anchor === null && b2.comments[1].body === '> 见 另一折 与 本折某行\n\n这条跨了链接', JSON.stringify(b2?.comments));
+  chk('svc-anchorfail-drafts-cleared', Boolean(await waitFor(() => !draftCards().length && !document.querySelector('.btn-submit') && !document.querySelector('.anchor-fail'))),
+    `drafts=${draftCards().length}`);
+
   // 让 app 的事件游标先对齐到「现在」（首轮只记游标），之后的新版本才算增量
   await window.__svcPoll?.();
 
@@ -501,7 +528,8 @@ export async function runSvcSmoke(docEl) {
     `before=${nLines} after=${mod?.querySelectorAll('.diff-line').length}`);
   chk('svc-diff-readonly', !document.querySelector('.diff-view textarea, .diff-view .zhupi-float'));
   document.querySelector('.diff-close')?.click();
-  chk('svc-diff-close', Boolean(await waitFor(() => !document.querySelector('.diff-view'))) && qd() === null && !document.querySelector('.work.work-hidden'),
+  // 三个条件一起等：?diff 由 ui.js 的 useEffect 在 DOM 提交**之后**才删，只等 .diff-view 消失再读 URL 会偶发读到旧值
+  chk('svc-diff-close', Boolean(await waitFor(() => !document.querySelector('.diff-view') && qd() === null && !document.querySelector('.work.work-hidden'))),
     `diff=${qd()}`);
 
   // ⑥ 画可 = approve 带 revision_no=3（所批即所合）；这折带题，画可先走判框答题

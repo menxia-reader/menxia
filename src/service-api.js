@@ -68,7 +68,9 @@ export const isLoggedIn = () => Boolean(loadAuth()?.access_token);
 export class ApiError extends Error {
   constructor(status, body, statusText = '') {
     const e = body?.error || {};
-    super(`${status} ${e.code || statusText}${e.message ? ` — ${e.message}` : ''}`);
+    // 文案点名数据源：服务模式下的错误绝不说「GitHub」（2026-11-23 报障，docs/ANCHOR-FAIL-UX.md）
+    const code = e.code || (typeof body?.error === 'string' ? body.error : '') || statusText;
+    super(`门下服务返回 ${status}${code ? `：${code}` : ''}${e.message ? `：${e.message}` : ''}`);
     this.status = status;
     // OAuth 端点（/oauth/token）的错误体是 RFC 6749 形状 { error: "invalid_grant" }，不是 { error: { code } }
     this.code = e.code || (typeof body?.error === 'string' ? body.error : '');
@@ -465,10 +467,13 @@ export async function listIssueComments(id) {
 /** 纯函数：ui 的 comments[]（path/line/quote/note/body）→ 批量端点请求体。 */
 export function batchPayload({ comments = [], commitId, fallbackBody = '' }) {
   const { no } = parseRef(commitId);
-  const list = comments.map((c) => ({
-    body: String(c.note ?? c.body ?? ''),
-    anchor: { document_path: c.path, quote: String(c.quote || ''), ...(c.line ? { line: c.line } : {}) },
-  }));
+  // whole：锚点 400 后他选了「改成整折评论再呈」——去掉 anchor、正文前加「> 引文」。原位不动，序号仍对得上草稿
+  const list = comments.map((c) => (c.whole
+    ? { body: `> ${String(c.quote || '')}\n\n${String(c.note ?? c.body ?? '')}`, anchor: null }
+    : {
+      body: String(c.note ?? c.body ?? ''),
+      anchor: { document_path: c.path, quote: String(c.quote || ''), ...(c.line ? { line: c.line } : {}) },
+    }));
   if (fallbackBody) list.push({ body: String(fallbackBody), anchor: null });
   return { ...(no ? { revision_no: no } : {}), comments: list };
 }
