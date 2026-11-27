@@ -153,6 +153,34 @@ export function buildDeepLink(origin, { repo, prNumber, path, line }) {
   return `${origin}?${q}`;
 }
 
+// ── 门下内链 / 外链（docs/DOC-LINKS.md，2026-11-27「点门下里的 link，弹不出 link 来」）──
+// 门下的折在正文里互相引用有两种写法，都该在**当前客户端内**开那一折，而不是跳出去：
+//   https://<门下服务>/r/rv_<26位>     —— 服务给 agent 的 web_url（menxia-mcp 写进正文的就是它）
+//   https://<网页阅读器>/?pr=rv_…|<n>   —— 本网页的直达链（buildDeepLink 产物，含 repo/path/line）
+// serviceOrigins：认得的门下服务源（正式 + 当前生效的那个，见 service-api.js resolveServiceUrl）；
+// appUrls：认得的网页阅读器地址（当前页 + 公开站），比对 origin+目录，index.html 与目录根同等。
+// 返回 parseDeepLink 同形状 { repo, prNumber, path, line }；不认得一律 null（交给外链那条路）。
+export const PUBLIC_APP_URL = 'https://menxia-reader.github.io/menxia/';
+const SHORT_RE = /^\/r\/(rv_[0-9A-Z]{26})\/?$/;
+const appDir = (u) => u.origin + u.pathname.replace(/[^/]*$/, '');
+export function parseFolderLink(href, { serviceOrigins = [], appUrls = [] } = {}) {
+  const h = String(href || '').trim();
+  if (!h) return null;
+  let u;
+  try { u = new URL(h, appUrls[0] || PUBLIC_APP_URL); } catch { return null; }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+  const origins = serviceOrigins.map((s) => { try { return new URL(s).origin; } catch { return null; } });
+  const m = SHORT_RE.exec(u.pathname);
+  if (m && origins.includes(u.origin)) return { repo: null, prNumber: m[1], path: null, line: null };
+  const dirs = appUrls.map((s) => { try { return appDir(new URL(s)); } catch { return null; } });
+  if (dirs.includes(appDir(u)) && /^(index\.html)?$/.test(u.pathname.split('/').pop())) return parseDeepLink(u.search);
+  return null;
+}
+
+// 绝对 http(s) 外链（相对路径 / 锚点 / mailto 等不算）：网页里一律新标签开，不让当前页导航走——
+// 当前页导航走＝读者被带离门下，「弹不出来」；且未呈的涂归草稿与阅读位置都跟着丢。
+export const isExternalHttp = (href) => /^https?:\/\//i.test(String(href || '').trim());
+
 // ── 文档内的相对链接（[中文](README.zh-CN.md) 这种）──
 // 不处理的话点击会跳到 Pages 源站的同名路径 → 404（2026-07-27 Charlie 点「中文」踩到；
 // M1 评审其实点过这条，当时判为「小」被押后，结果真咬人）。

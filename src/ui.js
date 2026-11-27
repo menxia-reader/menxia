@@ -11,7 +11,8 @@ import * as A from './anchor.js';
 import { demoApi, autoAnnotate } from './demo.js';
 import { buildIndex, searchIndex, prNumberOf, homeTabOf } from './search.js';
 import { decorateVerifyMarkers, countVerifyMarkers } from './verify.js';
-import { parseZhupiLink, buildRef, parseDeepLink, buildDeepLink, parseHappySession, resolveRelativeDocLink } from './link.js';
+import { parseZhupiLink, buildRef, parseDeepLink, buildDeepLink, parseHappySession, resolveRelativeDocLink, parseFolderLink, isExternalHttp, PUBLIC_APP_URL } from './link.js';
+import { SERVICE_URL, PROD_SERVICE_URL } from './service-api.js';
 import { siblingFor, visibleDocs, getLang, setLang, variantOf } from './lang.js';
 import { getReadStep, setReadStep, scaleOf, clampStep } from './readsize.js';
 import {
@@ -1118,18 +1119,40 @@ function App() {
   // 还会往地址栏挂一截 hash（地址栏是深链的载体，脏了「拷直达链」就跟着脏）。
   // 正文里的锚同样从这里过：`.read-row` 的 onDocClick 对 `#` 开头一律不认（①② 都返 null），
   // 不 preventDefault，冒泡上来正好由这里接住，两条路不会互相抢。
+  //
+  // 同一处再接两类（docs/DOC-LINKS.md）——放在 `.work` 而不是 onDocClick，是因为折首说明、判、
+  // 批注串里的链接也得同样处理；正文里的先过 onDocClick（相对链 / 本仓 permalink 它已 preventDefault），
+  // 冒泡到这里看 defaultPrevented 就不会两条路抢同一下：
+  //   门下内链（服务短链 /r/rv_… 与网页 ?pr=…）→ app 内开那一折；清单里没有 → 新标签兜底，不死链
+  //   其余绝对 http(s) 外链 → 新标签（noopener），当前页不导航走
   const onAnchorClick = useCallback((e) => {
-    const a = e.target.closest('a[href^="#"]');
-    if (!a) return;
+    const a = e.target.closest('a[href]');
+    if (!a || e.defaultPrevented) return;
     // 修饰键/中键：读者是想「在新标签打开」，那是浏览器的活，别抢（抢了就永远开不了新窗）
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button) return;
+    const href = a.getAttribute('href');
+    if (!href.startsWith('#')) {
+      const folder = parseFolderLink(href, {
+        serviceOrigins: [PROD_SERVICE_URL, SERVICE_URL],
+        appUrls: [location.origin + location.pathname, PUBLIC_APP_URL],
+      });
+      const known = folder && (!folder.repo || folder.repo === gh.getRepoSlug())
+        && [...prs, ...donePrs].some((p) => p.number === folder.prNumber);
+      if (known) { e.preventDefault(); jumpTo(folder); return; }
+      if (folder || isExternalHttp(href)) {
+        e.preventDefault();
+        const abs = new URL(href, location.href).href;
+        window.open(isExternalHttp(href) ? href : abs, '_blank', 'noopener');
+      }
+      return;
+    }
     e.preventDefault();
-    const frag = a.getAttribute('href').slice(1);
+    const frag = href.slice(1);
     // 光秃秃一个 `#` 是「回到顶部」的老写法。拦下却什么都不做＝把它变成按不动的死钮
     // （2026-08-06 双查第二轮抓到，是上一轮修复亲手造的）——既然拦了，就得把它原本的活干了。
     if (frag) jumpToAnchor(frag);
     else scroller().scrollTo({ top: 0 });
-  }, [docPath]);
+  }, [docPath, prs, donePrs, cur]);
 
   // 「引用此处」：把当前选中处拷成一条 GitHub permalink + 引文，粘进别的涂归即成链接
   async function copyRef(e) {

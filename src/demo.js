@@ -31,7 +31,7 @@ ${Array.from({ length: 14 }, (_, i) => `第 ${i + 1} 段填充：读折台的滚
 
 页内锚点还有个老写法 [回到顶部](#)，点了要真的回顶。
 
-折间链接测试：见 [另一折](https://github.com/demo/repo/pull/998) 与 [本折某行](https://github.com/demo/repo/blob/main/docs/demo.md#L20)；外链 [GitHub](https://github.com/slopus/happy) 不该被拦。
+折间链接测试：见 [另一折](https://github.com/demo/repo/pull/998) 与 [本折某行](https://github.com/demo/repo/blob/main/docs/demo.md#L20)；外链 [GitHub](https://github.com/slopus/happy) 不该被拦。门下内链：[网页直达](https://menxia-reader.github.io/menxia/?pr=998) 与 [服务短链](https://menxia-service.menxia-service.workers.dev/r/rv_01DEMO000000000000000000X9)。
 
 跨篇锚点测试（PAIN #86）：[跳到别篇的落位节](guide.zh-CN.md#落位节) —— 切篇后要落到那一节，不是页首。
 
@@ -1167,19 +1167,40 @@ async function runSmoke(docEl) {
     chk('link-jump-flash', flashed >= 1,
       `flash=${flashed} href=${inner.getAttribute('href')} tab=${document.querySelector('.doc-tab.active')?.textContent || '-'}`);
   }
-  if (outer) {
-    // 外链必须放行——但真放行就会导航走、页面死掉。做法：在 document 上挂一次性监听器，
-    // 它跑在 app 的 .read-row 处理器之后：先读 defaultPrevented（即 app 的决定），再拦下导航。
+  // 外链 / 门下内链（docs/DOC-LINKS.md）：外链必须在新标签开（window.open _blank noopener），
+  // 当前页不得导航走；不认得的门下短链（清单里没这折）同样新标签兜底。window.open 换成记录桩，
+  // document 上的一次性监听器兜住「app 没拦」时的真导航，免得页面死掉。
+  const opened = [];
+  const realOpen = window.open;
+  window.open = (...args) => { opened.push(args); return null; };
+  const clickGuarded = async (a) => {
     let appPrevented = null;
     document.addEventListener('click', function once(e) {
       appPrevented = e.defaultPrevented;
       e.preventDefault();
       document.removeEventListener('click', once);
     });
-    outer.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
     await sleep(150);
-    chk('external-link-not-hijacked', appPrevented === false, `appPrevented=${appPrevented}`);
+    return appPrevented;
+  };
+  if (outer) {
+    const before = location.href;
+    const prevented = await clickGuarded(outer);
+    const o = opened.pop();
+    chk('external-link-new-tab',
+      prevented === true && o?.[0] === 'https://github.com/slopus/happy' && o?.[1] === '_blank' && /noopener/.test(o?.[2] || '') && location.href === before,
+      `prevented=${prevented} open=${JSON.stringify(o)}`);
   }
+  const svcShort = [...document.querySelectorAll('#doc a[href]')].find((a) => a.getAttribute('href').includes('/r/rv_'));
+  if (svcShort) {
+    const prevented = await clickGuarded(svcShort);
+    const o = opened.pop();
+    chk('svc-short-link-unknown-falls-back-new-tab',
+      prevented === true && o?.[0] === svcShort.getAttribute('href') && o?.[1] === '_blank',
+      `prevented=${prevented} open=${JSON.stringify(o)}`);
+  } else chk('svc-short-link-unknown-falls-back-new-tab', false, 'MISSING');
+  window.open = realOpen;
   // 跨篇锚点（PAIN #86 残账）：点 `别篇.md#节` 切篇后，目标节要闪（＝落到那一节，不是页首）。
   // 换的是真·另一篇（guide.zh-CN.md），落点 h2「落位节」在新篇渲染完那一拍由 jumpRef 滚到。
   // 放在 inner/outer 都消费完之后：这段会切走 #doc 岛屿，早跑会让上面捕获的链接节点脱离文档。
@@ -1563,6 +1584,22 @@ async function runSmoke(docEl) {
   chk('merge-doc-still-rendered', Boolean(document.querySelector('.stage-main article h1')));
   chk('merge-turns-readonly', !document.querySelector('.btn-qinci'));
   chk('merge-offers-next-not-jumps', Boolean(document.querySelector('.notice-next')));
+
+  // 网页直达链 `…/menxia/?pr=998` 写在正文里：点了在 app 内开那一折，不新开标签、不整页跳走
+  // （docs/DOC-LINKS.md）。放最后：它换折，前面按 #999 写的断言都已消费完。
+  {
+    const webLink = [...document.querySelectorAll('#doc a[href]')].find((a) => a.getAttribute('href').includes('/menxia/?pr=998'));
+    const opened = [];
+    const realOpen = window.open;
+    window.open = (...args) => { opened.push(args); return null; };
+    const before = location.pathname;
+    webLink?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+    await sleep(900);
+    window.open = realOpen;
+    const no = document.querySelector('.crumb-no')?.textContent || '';
+    chk('web-deep-link-opens-in-app', Boolean(webLink) && no.includes('998') && !opened.length && location.pathname === before,
+      `link=${Boolean(webLink)} crumb=${no} opened=${opened.length}`);
+  }
 
   console.log(`[smoke] RESULT pass=${pass} fail=${fail}`);
 }

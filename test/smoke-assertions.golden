@@ -47,7 +47,7 @@ drafts-cleared-after-submit
 drafts-persisted
 empty-draft-dropped-on-switch
 empty-draft-starts-editing
-external-link-not-hijacked
+external-link-new-tab
 fence-line-precise
 float-closes-on-user-scroll
 float-survives-late-programmatic-scroll
@@ -110,6 +110,7 @@ submit-btn-visible
 submit-commit-id
 submit-fired
 submit-line-set
+svc-short-link-unknown-falls-back-new-tab
 thread-expand-btn-actually-clickable
 thread-view-backdrop-closes
 thread-view-body-rendered
@@ -122,6 +123,7 @@ touch-selection-shows-float
 update-button-hidden-on-desktop
 verify-count-in-topbar
 verify-marker-rendered
+web-deep-link-opens-in-app
 zongpi-auto-opens-after-send
 zongpi-card-above-other-cards
 zongpi-card-aligned-to-margin-col
