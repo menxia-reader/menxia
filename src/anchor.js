@@ -12,6 +12,30 @@ export const FLOAT_SCROLL_GRACE = 600;
 export const scrollClosesFloat = (shownAt, now, grace = FLOAT_SCROLL_GRACE) =>
   !Number.isFinite(shownAt) || now - shownAt >= grace;
 
+// ── 短划选（docs/SHORT-QUOTE.md）──
+// 与门下服务 C1 同判据（服务端 schemas.ts）：按码点、去空白计；含任一 CJK 字符 → ≥1；
+// 带 prefix/suffix（任一非空）→ ≥1；否则（纯 ASCII 且无上下文）→ ≥3。
+// 2026-11-26 报障：划「竞品」两个字（中文完整的词）→ 服务端按 JS length ≥3 拒、整批 400。
+const CJK_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+export const CONTEXT_MAX = 64;
+export const hasCJK = (s) => CJK_RE.test(String(s || ''));
+/** true＝服务端会以「划选太短」拒收这条锚点。 */
+export function quoteTooShort(quote, { prefix = '', suffix = '' } = {}) {
+  const q = String(quote || '');
+  const n = [...q.replace(/\s+/g, '')].length;
+  if (n < 1) return true;
+  if (hasCJK(q) || String(prefix || '').trim() || String(suffix || '').trim()) return false;
+  return n < 3;
+}
+/** 块文本 text 里 [start, start+len) 是划选，取两侧各 ≤max 字符原文上下文（压空白，不跨块）。 */
+export function contextAround(text, start, len, max = CONTEXT_MAX) {
+  const t = String(text || '');
+  const s = Math.max(0, Math.min(start, t.length));
+  const e = Math.max(s, Math.min(s + len, t.length));
+  const sq = (x) => x.replace(/\s+/g, ' ');
+  return { prefix: sq(t.slice(Math.max(0, s - max), s)).slice(-max), suffix: sq(t.slice(e, e + max)).slice(0, max) };
+}
+
 // ── 选区 → 锚 ──
 export function closestLine(node) {
   const el = node.nodeType === 1 ? node : node.parentElement;
@@ -25,6 +49,7 @@ export function computeAnchor(doc) {
   if (!doc || !doc.contains(range.commonAncestorContainer)) return null;
   const quoteRaw = sel.toString();
   const quote = quoteRaw.trim().replace(/\s+/g, ' ');
+  // 防误点：单字符不出浮钮。CJK 单字放开会改 golden（原生一致性依据），另起变更（docs/SHORT-QUOTE.md「未做」）
   if (quote.length < 2) return null;
   const el = closestLine(range.startContainer);
   if (!el) return null;
@@ -56,8 +81,28 @@ export function computeAnchor(doc) {
     r3.setEnd(range.startContainer, range.startOffset);
     offset = r3.toString().length;
   } catch { /* 从头找 */ }
+  // 原文上下文：短 quote 多处出现时服务端靠它消歧，也让 ASCII 短词过 C1（docs/SHORT-QUOTE.md）
+  const ctx = draftContext(el.textContent, quoteRaw.trim(), offset);
   const rect = range.getBoundingClientRect();
-  return { blockLine, line, offset, quote: quote.slice(0, 300), quoteRaw: quoteRaw.trim().slice(0, 300), rect };
+  return { blockLine, line, offset, quote: quote.slice(0, 300), quoteRaw: quoteRaw.trim().slice(0, 300), ...ctx,
+    tooShort: quoteTooShort(quote, ctx), rect };
+}
+
+/** 块文本里在 offset 附近找到 raw，取两侧上下文；找不到就从 offset 起算。 */
+export function draftContext(blockText, raw, offset = 0) {
+  const t = String(blockText || '');
+  let at = t.indexOf(raw, Math.max(0, offset - 2));
+  if (at < 0) at = t.indexOf(raw);
+  if (at < 0) at = offset;
+  return contextAround(t, at, raw.length);
+}
+
+/** 老草稿没带 prefix/suffix：按当前渲染的块补上（块已不在就留空，服务端照旧按 quote/line 找）。 */
+export function contextForDraft(doc, d) {
+  if (d.prefix || d.suffix) return { prefix: d.prefix || '', suffix: d.suffix || '' };
+  const block = doc?.querySelector(`[data-line="${d.blockLine}"]`);
+  if (!block || !d.quoteRaw) return { prefix: '', suffix: '' };
+  return draftContext(block.textContent, d.quoteRaw, d.offset || 0);
 }
 
 // ── 高亮定位 ──
@@ -177,11 +222,40 @@ export const fmtDraft = (d) => `> ${d.quote}\n\n${d.note}`;
 // 呈出被拒是不是「第 index 条引文在服务端正文里找不到」（门下 createCommentsBatch：400 invalid_argument，
 // details {field:'comments.<i>.anchor.quote', index:i}，新版服务端再附 quote / document_path，缺了照认）。
 // 认出来 ui 就标出那条草稿、给「改成整折评论再呈 / 取消」，而不是整批失败了事（docs/ANCHOR-FAIL-UX.md）。
-export function anchorFailure(err) {
+//
+// 逐条 400（C3，docs/SHORT-QUOTE.md）：服务端仍整批原子，但 details.items[] 列出**所有**不合格条
+// （每项 {field, index, message}；errors[] 同义），旧服务端只给单条 {field, index} 照认。
+// field 认 comments.<i>.anchor 及其子字段（quote 太短 / 找不到 / ambiguous）；body 等非锚点错误不认。
+const ANCHOR_FIELD = /^comments\.\d+\.anchor(\.|$)/;
+export function anchorFailures(err) {
   const d = err?.details;
-  if (err?.status !== 400 || err.code !== 'invalid_argument' || !d) return null;
-  if (typeof d.field !== 'string' || !d.field.endsWith('.anchor.quote') || !Number.isInteger(d.index)) return null;
-  return { index: d.index, quote: typeof d.quote === 'string' ? d.quote : '', documentPath: typeof d.document_path === 'string' ? d.document_path : '' };
+  if (err?.status !== 400 || err.code !== 'invalid_argument' || !d || typeof d !== 'object') return [];
+  const list = Array.isArray(d.items) ? d.items : Array.isArray(d.errors) ? d.errors : [d];
+  const seen = new Set();
+  const out = [];
+  for (const x of list) {
+    if (!x || typeof x.field !== 'string' || !ANCHOR_FIELD.test(x.field) || !Number.isInteger(x.index) || seen.has(x.index)) continue;
+    seen.add(x.index);
+    out.push({
+      index: x.index,
+      quote: typeof x.quote === 'string' ? x.quote : '',
+      documentPath: typeof x.document_path === 'string' ? x.document_path : '',
+      reason: typeof x.message === 'string' ? x.message : (typeof x.reason === 'string' ? x.reason : ''),
+    });
+  }
+  return out;
+}
+
+// inline：ui 发出去的那份 comments（下标 = 服务端 index，带 draftId/quote/whole）。
+// → null（不是逐条锚点错误，照整批失败处理）| { bad: [{draftId, n, quote, reason}], rest: 其余可立即重呈的 inline }
+export function splitBatchFailure(err, inline) {
+  const fails = anchorFailures(err).filter((f) => inline[f.index] && !inline[f.index].whole);
+  if (!fails.length) return null;
+  const badIdx = new Set(fails.map((f) => f.index));
+  return {
+    bad: fails.map((f) => ({ draftId: inline[f.index].draftId, n: f.index + 1, quote: inline[f.index].quote, reason: f.reason })),
+    rest: inline.filter((_, i) => !badIdx.has(i)),
+  };
 }
 
 // ── 已呈批注串（M3）──

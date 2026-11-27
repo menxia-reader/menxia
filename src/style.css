@@ -412,6 +412,7 @@ main { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: colum
 .anchor-fail-quote { color: var(--ink-soft); }
 .anchor-fail-hint { flex: 1 1 260px; min-width: 0; color: var(--ink-soft); font-size: var(--t-xs); }
 .anno-card.anno-failed { border-left-color: var(--err, #b3261e); box-shadow: 0 0 0 1px var(--err, #b3261e); }
+.anno-fail-reason { color: var(--err, #b3261e); font-size: 12px; margin-top: 4px; }
 .anno-whole { color: var(--ink-soft); }
 
 .work { flex: 1; min-height: 0; overflow-y: auto; padding: 30px var(--work-pad) 60px; }

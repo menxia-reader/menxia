@@ -18,6 +18,7 @@
 //   verifier/state 只活在 sessionStorage，换完 token 立刻删。
 // 任何 token 都不进 IndexedDB 正文缓存、不进 SW Cache（与 PAT 同一条铁律，见 offline.js 头注）。
 import { ApiError as GhApiError } from './github.js';
+import { CONTEXT_MAX } from './anchor.js';
 
 export const SERVICE_URL = 'https://menxia-service.menxia-service.workers.dev';
 export const API_BASE = `${SERVICE_URL}/api/v1`;
@@ -472,7 +473,12 @@ export function batchPayload({ comments = [], commitId, fallbackBody = '' }) {
     ? { body: `> ${String(c.quote || '')}\n\n${String(c.note ?? c.body ?? '')}`, anchor: null }
     : {
       body: String(c.note ?? c.body ?? ''),
-      anchor: { document_path: c.path, quote: String(c.quote || ''), ...(c.line ? { line: c.line } : {}) },
+      anchor: {
+        document_path: c.path, quote: String(c.quote || ''), ...(c.line ? { line: c.line } : {}),
+        // 原文上下文（docs/SHORT-QUOTE.md C4）：短 quote 消歧 + 让 ASCII 短词过服务端 C1；空的不发
+        ...(c.prefix ? { prefix: String(c.prefix).slice(-CONTEXT_MAX) } : {}),
+        ...(c.suffix ? { suffix: String(c.suffix).slice(0, CONTEXT_MAX) } : {}),
+      },
     }));
   if (fallbackBody) list.push({ body: String(fallbackBody), anchor: null });
   return { ...(no ? { revision_no: no } : {}), comments: list };
@@ -484,7 +490,11 @@ export async function submitReview(id, payload) {
   try {
     return await post(`/reviews/${encodeURIComponent(id)}/comments/batch`, body);
   } catch (err) {
-    if (err?.status === 400 && Number.isInteger(err.details?.index)) {
+    const many = Array.isArray(err?.details?.items) ? err.details.items.length : 0;
+    if (err?.status === 400 && many) {
+      // 逐条 400（C3）：ui 用 details.items 拆分重呈，这里只给可读总述
+      err.message = `${many} 条涂归没呈上（${err.message}）`;
+    } else if (err?.status === 400 && Number.isInteger(err.details?.index)) {
       err.message = `第 ${err.details.index + 1} 条的引文在当前版本里找不到，整批未呈（${err.message}）`;
     } else if (err?.status === 409) {
       err.message = `这折已被推了新版本，先刷新再呈（${err.message}）`;

@@ -531,8 +531,14 @@ export const S = deepFreeze({
     done: (inlineN, fallbackN) => `已呈回 ${inlineN} 条涂归${fallbackN ? `（${fallbackN} 条并入判）` : ''}——回 Hermes 说「读批注」。`,
     failed: (msg) => `呈递失败（草稿都还在）：${msg}`,
     // 锚点 400（docs/ANCHOR-FAIL-UX.md）：标出第 n 条，给「改成整折评论再呈 / 取消」，草稿一条不动
-    anchorFailed: (n) => `第 ${n} 条涂归的引文在门下当前版本里找不到，整批没呈（草稿都还在）。`,
-    anchorFailTitle: (n) => `第 ${n} 条的引文在门下当前版本里找不到`,
+    anchorFailed: (n, count = 1) => (count > 1
+      ? `${count} 条涂归都没过门下的锚点校验，整批没呈（草稿都还在，标红的看原因）。`
+      : `第 ${n} 条涂归的引文在门下当前版本里找不到，整批没呈（草稿都还在）。`),
+    anchorFailTitle: (n, reason) => (reason ? `第 ${n} 条没呈上：${reason}` : `第 ${n} 条的引文在门下当前版本里找不到`),
+    // 逐条 400（docs/SHORT-QUOTE.md C3）：其余已重呈，不合格的留作草稿标红
+    anchorNotFound: '引文在门下当前版本里找不到',
+    partialDone: (inlineN, fallbackN, badN) => `已呈回 ${inlineN} 条涂归${fallbackN ? `（${fallbackN} 条并入判）` : ''}；${badN} 条没过锚点校验，留作草稿（标红）。`,
+    quoteTooShort: '划选太短：英文至少 3 个字符——多划几个字再批。',
     anchorFailQuote: (q) => `「${q}」`,
     anchorFailHint: '可以把这条改成整折评论（不钉在原句上，正文前带一行引文），和其余涂归一起再呈；或者取消，草稿留着自己改。',
     anchorFailWhole: '改成整折评论再呈',
