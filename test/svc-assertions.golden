@@ -1,9 +1,11 @@
 svc-anchorfail-bar-shown
 svc-anchorfail-card-marked
 svc-anchorfail-drafts-cleared
-svc-anchorfail-drafts-kept
 svc-anchorfail-drafts-made
+svc-anchorfail-failed-kept
 svc-anchorfail-no-github-wording
+svc-anchorfail-partial-resent
+svc-anchorfail-short-cjk-context
 svc-anchorfail-whole-resent
 svc-approve-after-judge-same-version
 svc-approve-answers-sent

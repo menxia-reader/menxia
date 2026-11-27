@@ -968,6 +968,8 @@ function App() {
     const a = R.current.float;
     const c = R.current.cur;
     if (!a || !c) return;
+    // 划选时就拦（docs/SHORT-QUOTE.md C4）：纯 ASCII、<3 非空白字符、两侧也没上下文——服务端必拒，别等呈递
+    if (a.tooShort) { setFloat(null); return say(S.submit.quoteTooShort); }
     const d = {
       id: `d${Date.now()}${Math.floor(Math.random() * 1e4)}`,
       path: R.current.docPath,
@@ -977,6 +979,8 @@ function App() {
       offset: a.offset || 0,
       quote: a.quote,
       quoteRaw: a.quoteRaw,
+      prefix: a.prefix || '',
+      suffix: a.suffix || '',
       note: '',
       ts: Date.now(),
     };
@@ -1336,7 +1340,9 @@ function App() {
       const stale = d.ref !== ref; // 旧版本草稿：行号可能漂移，宁降判不钉错行
       if (byQuote) {
         // draftId：服务端 400 只回 details.index（= 这份 inline 的下标），靠它找回是哪条草稿；whole = 他已选「改成整折评论」
-        if (!stale && d.quote) inline.push({ path: d.path, line: d.line, side: 'RIGHT', body: A.fmtDraft(d), note: d.note, quote: d.quote, whole: Boolean(d.whole), draftId: d.id });
+        // prefix/suffix：原文上下文（docs/SHORT-QUOTE.md C4），老草稿没带就按当前渲染补上
+        const ctx = d.path === R.current.docPath ? A.contextForDraft(docRef.current, d) : { prefix: d.prefix || '', suffix: d.suffix || '' };
+        if (!stale && d.quote) inline.push({ path: d.path, line: d.line, side: 'RIGHT', body: A.fmtDraft(d), note: d.note, quote: d.quote, ...ctx, whole: Boolean(d.whole), draftId: d.id });
         else fallback.push(d);
         return;
       }
@@ -1348,24 +1354,37 @@ function App() {
       ? S.submit.fallbackBody(fallback.map(A.fmtDraft).join('\n\n---\n\n'))
       : S.submit.inlineBody(inline.length); // body 恒非空：COMMENT 的 body 是文档必填项，不赌空串
     setBusy(true);
+    // fallbackBody：只有门下 driver 读（降级草稿作为一条无锚点整单评论同批呈出）；GitHub 忽略
+    const send = (list) => api.submitReview(prNumber, { body, comments: list, commitId: ref, fallbackBody: fallback.length ? body : '' });
+    let bad = [];
     try {
-      // fallbackBody：只有门下 driver 读（降级草稿作为一条无锚点整单评论同批呈出）；GitHub 忽略
-      await api.submitReview(prNumber, { body, comments: inline, commitId: ref, fallbackBody: fallback.length ? body : '' });
-      A.saveDrafts(prNumber, []); // 直接清对应 key；内存只在世界没变时动
-      if (R.current.cur?.pr.number === prNumber) setDrafts([]);
-      setAnchorFail(null);
-      loadComments(prNumber); // 重拉已呈串：让刚呈的立即出现在右缘（世界守卫在 loadComments 内）
-      say(S.submit.done(inline.length, fallback.length));
-    } catch (err) {
-      // 锚点 400：整批原子没落库。不「整批失败了事」——标出第 index 条、问他要不要把它改成整折评论再呈；草稿一条不动
-      const af = byQuote ? A.anchorFailure(err) : null;
-      const hit = af && inline[af.index];
-      if (hit && !hit.whole) {
-        setAnchorFail({ prNumber, draftId: hit.draftId, n: af.index + 1, quote: hit.quote });
-        say(S.submit.anchorFailed(af.index + 1));
-      } else {
-        say(S.submit.failed(err.message));
+      try {
+        await send(inline);
+      } catch (err) {
+        // 逐条锚点 400（docs/SHORT-QUOTE.md C3）：整批原子没落库。不合格的留作草稿、标红原因；
+        // 其余立即重呈一次（再失败落到外层，草稿一条不动）；全部不合格才整体报错
+        const split = byQuote ? A.splitBatchFailure(err, inline) : null;
+        if (!split) throw err;
+        bad = split.bad;
+        const why = new Map(bad.map((b) => [b.draftId, b.reason || S.submit.anchorNotFound]));
+        const marked = A.loadDrafts(prNumber).map((d) => (why.has(d.id) ? { ...d, failReason: why.get(d.id) } : d));
+        A.saveDrafts(prNumber, marked);
+        if (R.current.cur?.pr.number === prNumber) setDrafts(marked);
+        const first = bad[0];
+        setAnchorFail({ prNumber, draftId: first.draftId, n: first.n, quote: first.quote, reason: first.reason });
+        if (!split.rest.length && !fallback.length) return say(S.submit.anchorFailed(first.n, bad.length));
+        await send(split.rest);
       }
+      // 只清呈上的草稿：不合格的（bad）留着；其余（含并入判的旧版草稿）都已落库
+      const keep = new Set(bad.map((b) => b.draftId));
+      const left = A.loadDrafts(prNumber).filter((d) => keep.has(d.id));
+      A.saveDrafts(prNumber, left); // 直接写对应 key；内存只在世界没变时动
+      if (R.current.cur?.pr.number === prNumber) setDrafts(left);
+      if (!bad.length) setAnchorFail(null);
+      loadComments(prNumber); // 重拉已呈串：让刚呈的立即出现在右缘（世界守卫在 loadComments 内）
+      say(bad.length ? S.submit.partialDone(inline.length - bad.length, fallback.length, bad.length) : S.submit.done(inline.length, fallback.length));
+    } catch (err) {
+      say(S.submit.failed(err.message));
     } finally {
       setBusy(false);
     }
@@ -1377,7 +1396,7 @@ function App() {
     const f = anchorFail;
     setAnchorFail(null);
     if (!f || R.current.cur?.pr.number !== f.prNumber) return;
-    const next = R.current.drafts.map((d) => (d.id === f.draftId ? { ...d, whole: true } : d));
+    const next = R.current.drafts.map((d) => (d.id === f.draftId ? { ...d, whole: true, failReason: undefined } : d));
     mutateDrafts(f.prNumber, () => next);
     submitAll(next);
   }
@@ -1600,7 +1619,7 @@ function App() {
     ...docDrafts.map((d) => ({
       blockLine: d.blockLine,
       el: html`<${DraftCard} key=${d.id} d=${d} doc=${docRef.current} heads=${docHeads} editing=${editing === d.id}
-        failed=${anchorFail?.draftId === d.id}
+        failed=${anchorFail?.draftId === d.id || Boolean(d.failReason)}
         onEdit=${editElsewhere} onSave=${saveDraft} onDrop=${dropDraft} />`,
     })),
     ...docThreads.map(({ t, blockLine, outdated }) => ({

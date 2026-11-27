@@ -20,6 +20,7 @@ export function DraftCard({ d, doc, heads, editing, failed = false, onEdit, onSa
       aria-invalid=${failed ? 'true' : undefined}>
       <div class="anno-quote">${S.card.quote(d.quote.length > 80 ? d.quote.slice(0, 80) + '…' : d.quote)}</div>
       <div class="anno-src">${S.card.srcLine(sec, d.line)}${d.whole ? html` · <span class="anno-whole">${S.submit.wholeTag}</span>` : ''}</div>
+      ${d.failReason ? html`<div class="anno-fail-reason" role="alert">${d.failReason}</div>` : ''}
       ${editing ? html`
         <textarea class="anno-input" ref=${taRef} placeholder=${S.card.draftPlaceholder} defaultValue=${d.note}
           onKeyDown=${(e) => {
@@ -45,8 +46,8 @@ export function DraftCard({ d, doc, heads, editing, failed = false, onEdit, onSa
 // 锚点 400 的问询条（docs/ANCHOR-FAIL-UX.md）：哪条（第 n 条 + 它的引文）、两条路。和「更新」小框同一种条，挂在顶栏下。
 export function AnchorFailBar({ f, busy, onWhole, onCancel }) {
   return html`
-    <div class="refresh-bar anchor-fail" role="alertdialog" aria-label=${S.submit.anchorFailTitle(f.n)}>
-      <span class="anchor-fail-title">${S.submit.anchorFailTitle(f.n)}</span>
+    <div class="refresh-bar anchor-fail" role="alertdialog" aria-label=${S.submit.anchorFailTitle(f.n, f.reason)}>
+      <span class="anchor-fail-title">${S.submit.anchorFailTitle(f.n, f.reason)}</span>
       <q class="anchor-fail-quote">${S.submit.anchorFailQuote(f.quote.length > 80 ? f.quote.slice(0, 80) + '…' : f.quote)}</q>
       <span class="anchor-fail-hint">${S.submit.anchorFailHint}</span>
       <span class="refresh-ask-btns">

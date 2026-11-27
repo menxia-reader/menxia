@@ -233,6 +233,28 @@ test('batchPayload：whole 草稿 = 改成整折评论（anchor null，正文前
   assert.deepEqual(b.comments[1], { body: '> 一句话结论：先改头\n\n二', anchor: null });
 });
 
+// 2026-11-26「竞品」报障（docs/SHORT-QUOTE.md C4）：锚点总带 prefix/suffix（各 ≤64），空的不发
+test('batchPayload：锚点带 prefix/suffix 原文上下文，截到 64；没有就不带字段', () => {
+  const b = svc.batchPayload({ commitId: 'rv_x@2', comments: [
+    { path: 'docs/a.md', line: 17, quote: '竞品', note: '推荐点竞品我来试用一下', prefix: '推荐点', suffix: 'z'.repeat(80) },
+    { path: 'docs/a.md', line: 3, quote: '好的', note: '一', prefix: '', suffix: '' },
+  ] });
+  assert.deepEqual(b.comments[0], { body: '推荐点竞品我来试用一下', anchor: { document_path: 'docs/a.md', quote: '竞品', line: 17, prefix: '推荐点', suffix: 'z'.repeat(64) } });
+  assert.deepEqual(b.comments[1].anchor, { document_path: 'docs/a.md', quote: '好的', line: 3 });
+});
+
+test('submitReview：逐条 400（details.items）不改写成「第 N 条找不到」，原样抛给 ui 拆分', async () => {
+  stubFetch(() => res(400, { error: { code: 'invalid_argument', message: '2 条涂归不合格', details: { field: 'comments.0.anchor.quote', index: 0, items: [
+    { field: 'comments.0.anchor.quote', index: 0, message: '划选太短：至少 3 个字符，或带上下文' },
+    { field: 'comments.1.anchor.quote', index: 1, message: '引文在当前版本里找不到' },
+  ] } } }));
+  await assert.rejects(() => svc.submitReview('rv_x', { commitId: 'rv_x@2', comments: [{ quote: 'ab' }, { quote: 'cd' }, { quote: 'efg' }] }), (err) => {
+    assert.equal(err.details.items.length, 2);
+    assert.match(err.message, /2 条涂归没呈上/);
+    return true;
+  });
+});
+
 test('createIssueComment（判）：open 折 → decisions request_changes + note；结案折 → 无锚点评论', async () => {
   stubFetch((url, opts, n) => {
     if (n === 1) return res(200, REVIEW);

@@ -5,21 +5,90 @@ import assert from 'node:assert/strict';
 import {
   validRightLines, parseCommentBody, threadComments, fmtDraft, loadDrafts, saveDrafts, pendingCountFor,
   reanchorByQuote, scrollClosesFloat, FLOAT_SCROLL_GRACE, blockTextIndex, headingIndex, sectionOf,
-  anchorFailure,
+  anchorFailures, splitBatchFailure, quoteTooShort, contextAround, draftContext, hasCJK, CONTEXT_MAX,
 } from '../src/anchor.js';
 
+const e = (status, code, details) => Object.assign(new Error('x'), { status, code, details });
+
 // ── 锚点 400（docs/ANCHOR-FAIL-UX.md）：认出「第 index 条引文在服务端正文里找不到」，其余错误一律不认 ──
-test('anchorFailure: invalid_argument + field 以 .anchor.quote 结尾 → {index, quote, documentPath}；新字段缺失也认', () => {
-  const e = (status, code, details) => Object.assign(new Error('x'), { status, code, details });
-  assert.deepEqual(anchorFailure(e(400, 'invalid_argument', { field: 'comments.1.anchor.quote', index: 1, quote: '一句话结论：', document_path: 'docs/a.md' })),
-    { index: 1, quote: '一句话结论：', documentPath: 'docs/a.md' });
-  assert.deepEqual(anchorFailure(e(400, 'invalid_argument', { field: 'comments.0.anchor.quote', index: 0 })),
-    { index: 0, quote: '', documentPath: '' });
-  assert.equal(anchorFailure(e(400, 'invalid_argument', { field: 'comments.0.body', index: 0 })), null);
-  assert.equal(anchorFailure(e(400, 'invalid_argument', { field: 'comments.0.anchor.quote' })), null);   // 没 index 标不出哪条
-  assert.equal(anchorFailure(e(409, 'stale_revision', { field: 'comments.0.anchor.quote', index: 0 })), null);
-  assert.equal(anchorFailure(new TypeError('Failed to fetch')), null);
-  assert.equal(anchorFailure(null), null);
+test('anchorFailures（旧单条形状）: invalid_argument + field 以 .anchor.quote 结尾 → [{index, quote, documentPath}]；新字段缺失也认', () => {
+  assert.deepEqual(anchorFailures(e(400, 'invalid_argument', { field: 'comments.1.anchor.quote', index: 1, quote: '一句话结论：', document_path: 'docs/a.md' })),
+    [{ index: 1, quote: '一句话结论：', documentPath: 'docs/a.md', reason: '' }]);
+  assert.deepEqual(anchorFailures(e(400, 'invalid_argument', { field: 'comments.0.anchor.quote', index: 0 })),
+    [{ index: 0, quote: '', documentPath: '', reason: '' }]);
+  assert.deepEqual(anchorFailures(e(400, 'invalid_argument', { field: 'comments.0.body', index: 0 })), []);
+  assert.deepEqual(anchorFailures(e(400, 'invalid_argument', { field: 'comments.0.anchor.quote' })), []);   // 没 index 标不出哪条
+  assert.deepEqual(anchorFailures(e(409, 'stale_revision', { field: 'comments.0.anchor.quote', index: 0 })), []);
+  assert.deepEqual(anchorFailures(new TypeError('Failed to fetch')), []);
+  assert.deepEqual(anchorFailures(null), []);
+});
+
+// ── 短划选（docs/SHORT-QUOTE.md）：2026-11-26 Charlie 划「竞品」两字，评论「推荐点竞品我来试用一下」→ 整批 400 ──
+const JINGPIN_ERR = e(400, 'invalid_argument', {
+  field: 'comments.0.anchor.quote', index: 0,
+  items: [
+    { field: 'comments.0.anchor.quote', index: 0, message: '划选太短：至少 3 个字符，或带上下文' },
+    { field: 'comments.2.anchor', index: 2, message: 'anchor ambiguous：引文在文中多处出现' },
+  ],
+});
+
+test('quoteTooShort：与服务端 C1 同判据——「竞品」1 个 CJK 字以上就够；ASCII <3 且无上下文才算太短', () => {
+  assert.equal(quoteTooShort('竞品'), false);
+  assert.equal(quoteTooShort('竞'), false);
+  assert.equal(quoteTooShort('カナ'), false);
+  assert.equal(quoteTooShort('한'), false);
+  assert.equal(quoteTooShort('OK'), true);
+  assert.equal(quoteTooShort(' a b '), true);              // 去空白计：2 个
+  assert.equal(quoteTooShort('OK', { prefix: 'say ' }), false);
+  assert.equal(quoteTooShort('OK', { suffix: ' then' }), false);
+  assert.equal(quoteTooShort('OK', { prefix: '  ', suffix: '' }), true);   // 空白上下文不算
+  assert.equal(quoteTooShort('abc'), false);
+  assert.equal(quoteTooShort('   '), true);
+  assert.equal(quoteTooShort('😀😀'), true);                // 码点计 2 个（JS length 是 4）
+  assert.equal(hasCJK('推荐点竞品'), true);
+  assert.equal(hasCJK('abc'), false);
+});
+
+test('contextAround / draftContext：划「竞品」两侧各取 ≤64 字原文上下文，多处出现时按 offset 取对那一处', () => {
+  const text = '先看竞品分析。推荐点竞品我来试用一下。';
+  const second = text.indexOf('竞品', 5);
+  assert.deepEqual(draftContext(text, '竞品', second), { prefix: '先看竞品分析。推荐点', suffix: '我来试用一下。' });
+  assert.deepEqual(draftContext(text, '竞品', 0), { prefix: '先看', suffix: '分析。推荐点竞品我来试用一下。' });
+  const long = 'x'.repeat(100) + '竞品' + 'y'.repeat(100);
+  const c = contextAround(long, 100, 2);
+  assert.equal(c.prefix, 'x'.repeat(CONTEXT_MAX));
+  assert.equal(c.suffix, 'y'.repeat(CONTEXT_MAX));
+  assert.deepEqual(contextAround('竞品', 0, 2), { prefix: '', suffix: '' });
+  assert.deepEqual(contextAround('a\n\n 竞品\tb', 4, 2), { prefix: 'a ', suffix: ' b' });   // 压空白
+});
+
+test('anchorFailures（C3 逐条形状）：details.items 列出所有不合格条，index + 原因都带回；errors[] 同义', () => {
+  assert.deepEqual(anchorFailures(JINGPIN_ERR), [
+    { index: 0, quote: '', documentPath: '', reason: '划选太短：至少 3 个字符，或带上下文' },
+    { index: 2, quote: '', documentPath: '', reason: 'anchor ambiguous：引文在文中多处出现' },
+  ]);
+  assert.deepEqual(anchorFailures(e(400, 'invalid_argument', { errors: [{ field: 'comments.1.anchor.quote', index: 1, reason: 'x' }, { field: 'comments.3.body', index: 3 }] })),
+    [{ index: 1, quote: '', documentPath: '', reason: 'x' }]);
+});
+
+test('splitBatchFailure：不合格的留作草稿（带原因），其余立即可重呈；whole 条与非锚点错误不拆', () => {
+  const inline = [
+    { draftId: 'd1', quote: '竞品', note: '推荐点竞品我来试用一下' },
+    { draftId: 'd2', quote: '第 3 段填充', note: '这条锚得上' },
+    { draftId: 'd3', quote: '填充', note: '多处出现' },
+  ];
+  assert.deepEqual(splitBatchFailure(JINGPIN_ERR, inline), {
+    bad: [
+      { draftId: 'd1', n: 1, quote: '竞品', reason: '划选太短：至少 3 个字符，或带上下文' },
+      { draftId: 'd3', n: 3, quote: '填充', reason: 'anchor ambiguous：引文在文中多处出现' },
+    ],
+    rest: [inline[1]],
+  });
+  // 全部不合格：rest 空 → 调用方整体报错
+  assert.deepEqual(splitBatchFailure(e(400, 'invalid_argument', { field: 'comments.0.anchor.quote', index: 0 }), [inline[0]]).rest, []);
+  assert.equal(splitBatchFailure(e(400, 'invalid_argument', { field: 'comments.0.anchor.quote', index: 0 }), [{ ...inline[0], whole: true }]), null);
+  assert.equal(splitBatchFailure(e(400, 'invalid_argument', { field: 'comments.0.body', index: 0 }), inline), null);
+  assert.equal(splitBatchFailure(e(409, 'stale_revision'), inline), null);
 });
 
 // ── 浮批钮遇滚动（2026-11-03：程序滚动晚到把刚出现的「批」收掉）──

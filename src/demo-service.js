@@ -8,6 +8,7 @@ import {
   SERVICE_URL, API_BASE, setAuthStorage, memoryAuthStorage, s256,
   buildAuthorizeUrl, exchangeCode, getToken, verifyToken, logout, requestRefresh,
 } from './service-api.js';
+import { quoteTooShort } from './anchor.js';
 
 const RID = 'rv_01DEMO000000000000000000S1';
 const now = () => new Date().toISOString();
@@ -189,15 +190,19 @@ async function handle(url, init) {
     if (!['open', 'changes_requested'].includes(state.review.status)) return ERR(409, 'review_closed');
     if (b.revision_no != null && b.revision_no !== cur().revision_no) return ERR(409, 'stale_revision');
     const text = norm(cur().text);
+    const bad = [];
     for (let i = 0; i < (b.comments || []).length; i++) {
       const a = b.comments[i].anchor;
       if (!b.comments[i].body) return ERR(400, 'invalid_argument', 'body required', { index: i });
       // 与 services/comments.ts createCommentsBatch 同契约：details {field, index}（新版服务端另附 quote/document_path，这里故意不给，验缺失兼容）。
-      // 判据也同：在 markdown 原文里找——划选跨了链接/粗体的渲染文本就找不到，正是 2026-11-23 报障的形状
-      if (a && (a.document_path !== 'docs/demo.md' || !text.includes(norm(a.quote)))) {
-        return ERR(400, 'invalid_argument', `comments[${i}].anchor.quote not found in the document at the current revision`, { field: `comments.${i}.anchor.quote`, index: i });
+      // 判据也同：在 markdown 原文里找——划选跨了链接/粗体的渲染文本就找不到，正是 2026-11-23 报障的形状。
+      // C1/C3（docs/SHORT-QUOTE.md）：quote 长度按码点、CJK 或带上下文 ≥1；仍整批原子，但 details.items 列出**所有**不合格条
+      if (a && quoteTooShort(a.quote, a)) bad.push({ field: `comments.${i}.anchor.quote`, index: i, message: '划选太短：至少 3 个字符，或带上下文' });
+      else if (a && (a.document_path !== 'docs/demo.md' || !text.includes(norm(a.quote)))) {
+        bad.push({ field: `comments.${i}.anchor.quote`, index: i, message: `第 ${i + 1} 条的引文在当前版本里找不到` });
       }
     }
+    if (bad.length) return ERR(400, 'invalid_argument', `${bad.length} 条涂归的锚点不合格`, { ...bad[0], items: bad });
     state.batches.push(b);
     return J({ items: b.comments.map((c) => mkComment(c, cur().revision_no)) }, 201);
   }
@@ -401,26 +406,36 @@ export async function runSvcSmoke(docEl) {
     `shown=${document.querySelectorAll('.anno-quote-shown').length}`);
   chk('svc-submit-button-gone', Boolean(await waitFor(() => !document.querySelector('.btn-submit'))));
 
-  // ③b 锚点 400（docs/ANCHOR-FAIL-UX.md）：第 2 条划选跨了链接，渲染文本在 markdown 原文里找不到 → 整批 400。
-  // 不许整批失败了事：问询条标出第 2 条与其引文、该草稿标红、草稿一条不丢；点「改成整折评论再呈」→ 同批重发成功、草稿清空
+  // ③b 锚点 400（docs/ANCHOR-FAIL-UX.md + docs/SHORT-QUOTE.md）：第 2 条划选跨了链接，渲染文本在 markdown 原文里找不到 → 逐条 400。
+  // 第 3 条是两个汉字的短划选（2026-11-26「竞品」报障的形状），带了上下文就该过。
+  // 不许整批失败了事：其余两条自动重呈落库；第 2 条留作草稿、标红原因，问询条标出它；点「改成整折评论再呈」→ 只重发它、草稿清空
   const draftCards = () => document.querySelectorAll('#margin-col .anno-card:not(.anno-shown):not(.zongpi-card)');
   const nBatches = state.batches.length;
   const pickedB = [
     await pick('第 3 段填充', '这条锚得上'),
     await pick('见 另一折 与 本折某行', '这条跨了链接'),
+    await pick('镜片', '推荐点镜片我来试用一下'),
   ];
-  chk('svc-anchorfail-drafts-made', pickedB.every(Boolean) && draftCards().length === 2, `picked=${pickedB} n=${draftCards().length}`);
+  chk('svc-anchorfail-drafts-made', pickedB.every(Boolean) && draftCards().length === 3, `picked=${pickedB} n=${draftCards().length}`);
   document.querySelector('.btn-submit')?.click();
   const bar = await waitFor(() => document.querySelector('.anchor-fail'));
   chk('svc-anchorfail-bar-shown', Boolean(bar) && bar.textContent.includes('第 2 条') && bar.textContent.includes('见 另一折 与 本折某行'), bar?.textContent);
   chk('svc-anchorfail-no-github-wording', !document.body.textContent.includes('GitHub 返回'));
+  const b1 = await waitFor(() => state.batches[nBatches]);
+  chk('svc-anchorfail-partial-resent', Boolean(b1) && b1.comments.length === 2 && b1.comments[0].anchor?.quote === '第 3 段填充' && b1.comments[1].anchor?.quote === '镜片',
+    JSON.stringify(b1?.comments));
+  const short = b1?.comments?.[1]?.anchor;
+  chk('svc-anchorfail-short-cjk-context', Boolean(short) && Boolean(short.prefix || short.suffix) && (short.prefix || '').length <= 64 && (short.suffix || '').length <= 64,
+    JSON.stringify(short));
+  await waitFor(() => draftCards().length === 1);
   const failedCard = document.querySelector('.anno-card.anno-failed');
-  chk('svc-anchorfail-card-marked', Boolean(failedCard) && failedCard.textContent.includes('这条跨了链接'), failedCard?.textContent);
-  chk('svc-anchorfail-drafts-kept', draftCards().length === 2 && state.batches.length === nBatches, `drafts=${draftCards().length} batches=${state.batches.length}`);
-  bar?.querySelector('.anchor-fail-whole')?.click();
-  const b2 = await waitFor(() => state.batches[nBatches]);
-  chk('svc-anchorfail-whole-resent', Boolean(b2) && b2.comments.length === 2 && b2.comments[0].anchor?.quote === '第 3 段填充'
-    && b2.comments[1].anchor === null && b2.comments[1].body === '> 见 另一折 与 本折某行\n\n这条跨了链接', JSON.stringify(b2?.comments));
+  chk('svc-anchorfail-card-marked', Boolean(failedCard) && failedCard.textContent.includes('这条跨了链接') && failedCard.querySelector('.anno-fail-reason')?.textContent.includes('找不到'),
+    failedCard?.textContent);
+  chk('svc-anchorfail-failed-kept', draftCards().length === 1 && state.batches.length === nBatches + 1, `drafts=${draftCards().length} batches=${state.batches.length}`);
+  document.querySelector('.anchor-fail .anchor-fail-whole')?.click();
+  const b2 = await waitFor(() => state.batches[nBatches + 1]);
+  chk('svc-anchorfail-whole-resent', Boolean(b2) && b2.comments.length === 1
+    && b2.comments[0].anchor === null && b2.comments[0].body === '> 见 另一折 与 本折某行\n\n这条跨了链接', JSON.stringify(b2?.comments));
   chk('svc-anchorfail-drafts-cleared', Boolean(await waitFor(() => !draftCards().length && !document.querySelector('.btn-submit') && !document.querySelector('.anchor-fail'))),
     `drafts=${draftCards().length}`);
 
