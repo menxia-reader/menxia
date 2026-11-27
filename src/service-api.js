@@ -20,16 +20,39 @@
 import { ApiError as GhApiError } from './github.js';
 import { CONTEXT_MAX } from './anchor.js';
 
-export const SERVICE_URL = 'https://menxia-service.menxia-service.workers.dev';
-export const API_BASE = `${SERVICE_URL}/api/v1`;
-export const CLIENT_ID = 'menxia-web';
-const AUTH_KEY = 'menxia.svc.auth';
-const PKCE_KEY = 'menxia.svc.pkce';
-const EVENTS_KEY = 'menxia.svc.events';
-export const anchorsByQuote = true;   // ui.js 据此走 quote 锚点路径（不做 hunk 行号校验）
+// ───────────────────────── 服务地址（正式 / staging 覆盖，docs/E2E.md）─────────────────────────
+// 浏览器 E2E 要对 staging 跑真服务。覆盖**只认白名单里的名字**，不收任意 URL：
+// `?service=staging` 写进 localStorage 并生效（OAuth 回调页 oauth.html 不带这个参数，靠落盘接上），
+// `?service=prod`（或任何非白名单值）清掉覆盖。没有覆盖时恒为正式地址——正式用户零影响。
+// 覆盖生效时 token 存另一把 key：正式 token 绝不会被当 Bearer 发给 staging，反之亦然。
+export const PROD_SERVICE_URL = 'https://menxia-service.menxia-service.workers.dev';
+export const STAGING_SERVICE_URL = 'https://menxia-service-staging.menxia-service.workers.dev';
+const SERVICE_OVERRIDES = { staging: STAGING_SERVICE_URL };
+export const SERVICE_OVERRIDE_KEY = 'menxia.svc.service';
+export function resolveServiceUrl(search, store) {
+  let q = null;
+  try { q = new URLSearchParams(search || '').get('service'); } catch { /* 烂 search 当没带 */ }
+  try {
+    if (q != null) {
+      if (Object.hasOwn(SERVICE_OVERRIDES, q)) store?.setItem(SERVICE_OVERRIDE_KEY, q);
+      else store?.removeItem(SERVICE_OVERRIDE_KEY);
+    }
+  } catch { /* 无痕模式写不进：本次仍按参数生效 */ }
+  let v = q;
+  if (v == null) { try { v = store?.getItem(SERVICE_OVERRIDE_KEY) ?? null; } catch { v = null; } }
+  return Object.hasOwn(SERVICE_OVERRIDES, v || '') ? SERVICE_OVERRIDES[v] : PROD_SERVICE_URL;
+}
 
 // ───────────────────────── 存储注入（demo / 测试换成内存，不污染真用户的 localStorage）─────────
-const ls = () => (typeof localStorage !== 'undefined' ? localStorage : null);
+const ls = () => { try { return typeof localStorage !== 'undefined' ? localStorage : null; } catch { return null; } };
+
+export const SERVICE_URL = resolveServiceUrl(typeof location !== 'undefined' ? location.search : '', ls());
+export const API_BASE = `${SERVICE_URL}/api/v1`;
+export const CLIENT_ID = 'menxia-web';
+const AUTH_KEY = SERVICE_URL === PROD_SERVICE_URL ? 'menxia.svc.auth' : 'menxia.svc.auth.staging';
+const PKCE_KEY = 'menxia.svc.pkce';
+const EVENTS_KEY = SERVICE_URL === PROD_SERVICE_URL ? 'menxia.svc.events' : 'menxia.svc.events.staging';
+export const anchorsByQuote = true;   // ui.js 据此走 quote 锚点路径（不做 hunk 行号校验）
 let authStore = {
   get: () => ls()?.getItem(AUTH_KEY) ?? null,
   set: (v) => ls()?.setItem(AUTH_KEY, v),
